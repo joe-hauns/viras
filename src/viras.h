@@ -1,5 +1,6 @@
 #include <optional>
 #include <iostream>
+#include <cassert>
 
 #pragma once
 
@@ -458,8 +459,6 @@ namespace viras {
     Term term_of_literal(Literal l)
     { return config.term_of_literal(l); }
 
-    Literal create_literal(bool b) { return config.create_literal(b); }
-
     Literal create_literal(Term t, PredSymbol s) { return config.create_literal(t,s); }
 
     Numeral num(Numeral l) { return config.num(l); }
@@ -496,7 +495,7 @@ namespace viras {
       T inner; 
       friend bool operator==(WithConfig l, WithConfig r) 
       { 
-        SASSERT(l.config == r.config);
+        assert(l.config == r.config);
         return l.inner == r.inner;
       }
       friend bool operator!=(WithConfig l, WithConfig r) 
@@ -526,19 +525,19 @@ namespace viras {
 
     friend CTerm operator+(CTerm lhs, CTerm rhs) 
     {
-      SASSERT(lhs.config == rhs.config);
+      assert(lhs.config == rhs.config);
       return CTerm {lhs.config, lhs.config->add(lhs.inner, rhs.inner)};
     }
 
     friend CTerm operator*(CNumeral lhs, CTerm rhs) 
     {
-      SASSERT(lhs.config == rhs.config);
+      assert(lhs.config == rhs.config);
       return CTerm {lhs.config, lhs.config->mul(lhs.inner, rhs.inner)};
     }
 
     friend CNumeral operator*(CNumeral lhs, CNumeral rhs) 
     {
-      SASSERT(lhs.config == rhs.config);
+      assert(lhs.config == rhs.config);
       return CNumeral {lhs.config, lhs.config->mul(lhs.inner, rhs.inner)};
     }
 
@@ -772,7 +771,7 @@ namespace viras {
 
       bool lim_inf(bool positive) const
       { 
-        SASSERT(term.oslp != 0);
+        assert(term.oslp != 0);
         switch (symbol) {
         case PredSymbol::Gt:
         case PredSymbol::Geq: return positive ? term.oslp > 0 
@@ -981,8 +980,8 @@ namespace viras {
         , period(std::move(period))
         , infty(std::move(infinity))
       {
-        SASSERT(term || infinity);
-        SASSERT(!infty || !period);
+        assert(term || infinity);
+        assert(!infty || !period);
       }
 
       VirtualTerm(Break t_pZ) : VirtualTerm(std::move(t_pZ.t), {}, std::move(t_pZ.p), {}) {}
@@ -1033,7 +1032,7 @@ namespace viras {
 #define if_then_(x, y) if_then([&]() { return x; }, [&]() { return y; }) 
 #define else_if_(x, y) .else_if([&]() { return x; }, [&]() { return y; })
 #define else____(x) .else_([&]() { return x; })
-#define else_is_(x,y) .else_([&]() { SASSERT(x); return y; })
+#define else_is_(x,y) .else_([&]() { assert(x); return y; })
 
     auto elim_set(Var const& x, LiraLiteral const& lit)
     {
@@ -1106,12 +1105,12 @@ namespace viras {
     Literal literal(Term t, PredSymbol s) 
     { return CLiteral { &_config, _config.create_literal(t.inner, s), }; }
 
-    Literal literal(bool b) { return CLiteral { &_config, _config.create_literal(b), }; }
+    Literal literal(bool b) { return literal(term(0), b ? PredSymbol::Eq : PredSymbol::Neq); }
 
     Literal vsubs_aperiodic0(LiraLiteral const& lit, Var const& x, VirtualTerm vt) {
       auto& s = lit.term;
       auto symbol = lit.symbol;
-      SASSERT(!vt.period);
+      assert(!vt.period);
       if (vt.infty) {
         /* case 3 */
         if (s.periodic()) {
@@ -1144,14 +1143,14 @@ namespace viras {
           }
         }
       } else {
-        SASSERT(!vt.epsilon && !vt.infty && !vt.period);
+        assert(!vt.epsilon && !vt.infty && !vt.period);
         return literal(subs(s.self, x, *vt.term), symbol);
       }
     }
 
 
     auto vsubs_aperiodic1(std::vector<LiraLiteral> const& lits, Var const& x, VirtualTerm const& term) {
-      SASSERT(!term.period);
+      assert(!term.period);
           /* case 2 */
       return iter::array(lits) 
         | iter::map([&](auto lit) { return vsubs_aperiodic0(lit, x, term); });
@@ -1205,7 +1204,8 @@ namespace viras {
 
     auto quantifier_elimination(typename Config::Var const& x, std::vector<LiraLiteral> const& lits)
     {
-      return quantifier_elimination(CVar { &_config, x }, lits);
+      return quantifier_elimination(CVar { &_config, x }, lits)
+        | iter::map([&](auto lits) { return std::move(lits) | iter::map([](auto lit) { return lit.inner; }); });
     }
   };
 
