@@ -1,8 +1,21 @@
 #include <optional>
 #include <iostream>
+#include <set>
 #include <cassert>
 
 #pragma once
+
+#define VIRAS_LOG(...) std::cout << __VA_ARGS__ << std::endl;
+
+#define DERIVE_TUPLE(Self,...) \
+      auto asTuple() const { return std::tie(__VA_ARGS__); } \
+      \
+      friend bool operator==(Self const& lhs, Self const& rhs)  \
+      { return lhs.asTuple() == rhs.asTuple(); } \
+      \
+      friend bool operator<(Self const& lhs, Self const& rhs)  \
+      { return lhs.asTuple() < rhs.asTuple(); } \
+
 
 namespace viras {
 
@@ -111,7 +124,7 @@ namespace viras {
 
     constexpr auto map = [](auto f) {
       return iterCombinator([f = std::move(f)](auto i) {
-        return MapIter<decltype(i), decltype(f)>{i,f};
+        return MapIter<decltype(i), decltype(f)>{std::move(i),std::move(f)};
       });
     };
 
@@ -122,7 +135,7 @@ namespace viras {
       F f;
       auto next() -> decltype(auto) { 
         auto e = i.next();
-        while (e && !f(&*e))
+        while (e && !f(*e))
           e = i.next();
         return e;
       }
@@ -134,6 +147,18 @@ namespace viras {
       });
     };
 
+
+    auto dedup() {
+      return iterCombinator([](auto iter) {
+            return std::move(iter)
+              | filter([set = std::set<
+                  value_type<decltype(iter)>
+                  >()](auto e) mutable {
+                  return set.insert(e).second;
+              });
+        });
+    }
+
     template<class I, class F>
     struct TakeWhileIter {
       I i;
@@ -144,7 +169,7 @@ namespace viras {
           return {};
         } else {
           auto e = i.next();
-          if (!bool(e) || !f(&*e)) {
+          if (!bool(e) || !f(*e)) {
             end = true;
             return {};
           } else {
@@ -216,6 +241,19 @@ namespace viras {
       return min_by([f = std::move(f)](auto l, auto r) { return f(l) < f(r); });
     };
 
+    template<class F>
+    auto inspect(F f) {
+      return map([f = std::move(f)](auto x) {
+          f(x);
+          return std::move(x);
+      });
+    }
+
+    template<class M>
+    auto dbg(M msg) {
+      return inspect([msg = std::move(msg)](auto x) { VIRAS_LOG(msg << ": " << x); });
+    }
+
     constexpr auto flat_map = [](auto f) {
       return map(f).compose(flatten);
     };
@@ -237,23 +275,39 @@ namespace viras {
     RangeIter<U> range(L lower, U upper)
     { return RangeIter<U>{U(std::move(lower)), std::move(upper)}; }
 
-    template<class Array>
-    auto array(Array && a)
-    { return range(0, a.size())
-       | map([a = std::move(a)](auto i) { return std::move(a[i]); }); }
-
-    template<class Array> auto array(Array const& a)
-    { return range(0, a.size()) | map([&](auto i) { return a[i]; }); }
-
-    template<class Array> auto array(Array      & a)
-    { return range(0, a.size()) | map([&](auto i) { return a[i]; }); }
+    // template<class Array>
+    // auto array(Array && a)
+    // { return range(0, a.size())
+    //    | map([a = std::move(a)](auto i) { return std::move(a[i]); }); }
 
 
-    template<class Array> auto array_ptr(Array const& a)
+    template<class Array, 
+      std::enable_if_t<std::is_reference_v<decltype(dummyVal<Array>()[0])>, bool> = true
+      > auto array(Array const& a)
     { return range(0, a.size()) | map([&](auto i) { return &a[i]; }); }
 
-    template<class Array> auto array_ptr(Array      & a)
+    template<class Array,
+      std::enable_if_t<std::is_reference_v<decltype(dummyVal<Array>()[0])>, bool> = true
+      > auto array(Array      & a)
     { return range(0, a.size()) | map([&](auto i) { return &a[i]; }); }
+
+
+    template<class Array, 
+      std::enable_if_t<!std::is_reference_v<decltype(dummyVal<Array>()[0])>, bool> = true
+      > auto array(Array const& a)
+    { return range(0, a.size()) | map([&](auto i) { return a[i]; }); }
+
+    template<class Array,
+      std::enable_if_t<!std::is_reference_v<decltype(dummyVal<Array>()[0])>, bool> = true
+      > auto array(Array      & a)
+    { return range(0, a.size()) | map([&](auto i) { return a[i]; }); }
+
+
+    // template<class Array> auto array_ptr(Array const& a)
+    // { return range(0, a.size()) | map([&](auto i) { return &a[i]; }); }
+    //
+    // template<class Array> auto array_ptr(Array      & a)
+    // { return range(0, a.size()) | map([&](auto i) { return &a[i]; }); }
 
     template<class F>
     struct ClosureIter {
@@ -415,6 +469,18 @@ namespace viras {
 
   enum class PredSymbol { Gt, Geq, Neq, Eq, };
 
+  inline std::ostream& operator<<(std::ostream& out, PredSymbol const& self)
+  { 
+    switch(self) {
+      case PredSymbol::Gt: return out << ">";
+      case PredSymbol::Geq: return out << ">=";
+      case PredSymbol::Neq: return out << "=";
+      case PredSymbol::Eq: return out << "!=";
+    }
+  }
+
+
+
   template<class Config>
   struct SimplifyingConfig {
     Config config;
@@ -493,13 +559,11 @@ namespace viras {
     struct WithConfig { 
       Config* config; 
       T inner; 
-      friend bool operator==(WithConfig l, WithConfig r) 
-      { 
-        assert(l.config == r.config);
-        return l.inner == r.inner;
-      }
       friend bool operator!=(WithConfig l, WithConfig r) 
       { return !(l == r); }
+      friend std::ostream& operator<<(std::ostream& out, WithConfig const& self)
+      { return out << self.inner; }
+      DERIVE_TUPLE(WithConfig, inner)
     };
 
     struct CTerm : public WithConfig<typename Config::Term> { };
@@ -727,20 +791,22 @@ namespace viras {
       Term distYminus;
       Term distYplus() { return distYminus + deltaY; }
       std::vector<Break> breaks;
-      Term distXminus() {
+      Term distXminus() const {
         return -(1 / oslp) * (oslp > 0 ? distYminus + deltaY
                                        : distYminus         );
       }
-      Term distXplus() { 
+      Term distXplus() const { 
         return  -(1 / oslp) * (oslp > 0 ? distYminus
                                         : distYminus + deltaY);
 
       }
-      Numeral deltaX() { return abs(1/oslp) * deltaY; }
+      Numeral deltaX() const { return abs(1/oslp) * deltaY; }
       Term lim_at(Term x0) const { return subs(lim, x, x0); }
       Term dseg(Term x0) const { return -(sslp * x0) + lim_at(x0); }
       Term zero(Term x0) const { return x0 - lim_at(x0) / sslp; }
       bool periodic() const { return oslp == 0; }
+      friend std::ostream& operator<<(std::ostream& out, LiraTerm const& self)
+      { return out << self.self; }
     };
 
 
@@ -757,9 +823,9 @@ namespace viras {
           return out << "-∞";
         }
       }
+      DERIVE_TUPLE(Infty, positive)
     };
     static constexpr Infty infty { .positive = true, };
-
 
     struct LiraLiteral {
       LiraTerm term;
@@ -784,7 +850,8 @@ namespace viras {
       bool lim(Infty i) const
       { return lim_inf(i.positive); }
 
-
+      friend std::ostream& operator<<(std::ostream& out, LiraLiteral const& self)
+      { return out << self.term << " " << self.symbol << " 0"; }
     };
 
     template<class IfVar, class IfOne, class IfMul, class IfAdd, class IfFloor>
@@ -825,8 +892,8 @@ namespace viras {
       return iter::nat_iter(numeral(0))
         | iter::take_while([r,p,k](auto n) -> bool { 
             switch(r) {
-              case Bound::Open: return (*n) * p < k; 
-              case Bound::Closed: return (*n) * p <= k; 
+              case Bound::Open:   return n * p < k; 
+              case Bound::Closed: return n * p <= k; 
             }
           })
         | iter::map([start, p](auto n) {
@@ -836,7 +903,8 @@ namespace viras {
 
     LiraTerm analyse(Term self, Var x) {
       return matchTerm(self, 
-        /* var v */ [&](auto y) { return LiraTerm {
+        /* var v */ [&](auto y) { 
+        return LiraTerm {
           .self = self,
           .x = x,
           .lim = self,
@@ -921,7 +989,7 @@ namespace viras {
           } else if (rec.breaks.empty()) {
             out.breaks.push_back(Break {rec.zero(term(0)), out.per});
           } else {
-            auto p_min = *(iter::array_ptr(out.breaks) 
+            auto p_min = *(iter::array(out.breaks) 
               | iter::map([](auto b) -> Numeral { return b->p; })
               | iter::min);
             for ( auto b0p_pZ : rec.breaks ) {
@@ -950,7 +1018,9 @@ namespace viras {
     std::vector<LiraLiteral> analyse(Literals const& self, Var x) 
     { 
       std::vector<LiraLiteral> out;
-      iter::array(self) | iter::foreach([&](auto lit) { return out.push_back(analyse(lit, x)); });
+      iter::array(self) 
+        | iter::map([&](auto lit) { return analyse(lit, x); })
+        | iter::foreach([&](auto lit) { return out.push_back(std::move(lit)); });
       return out; 
     }
 
@@ -961,6 +1031,7 @@ namespace viras {
     struct Epsilon {
       friend std::ostream& operator<<(std::ostream& out, Epsilon const& self)
       { return out << "ε"; }
+      DERIVE_TUPLE(Epsilon,)
     };
     static constexpr Epsilon epsilon;
 
@@ -995,18 +1066,24 @@ namespace viras {
       friend std::ostream& operator<<(std::ostream& out, VirtualTerm const& self)
       { 
         bool fst = true;
-#define OUTPUT(field)                                                                     \
+#define __OUTPUT(field)                                                                     \
         if (fst) { out << field; fst = false; }                                           \
         else { out << " + " << field; }                                                   \
 
-        if (self.term) { OUTPUT(*self.term) }
-        if (self.epsilon) { OUTPUT(*self.epsilon) }
-        if (self.period) { OUTPUT(*self.period << " ℤ") }
-        if (self.infinity) { OUTPUT(*self.infty) }
+        if (self.term) { __OUTPUT(*self.term) }
+        if (self.epsilon) { __OUTPUT(*self.epsilon) }
+        if (self.period) { __OUTPUT(*self.period << " ℤ") }
+        if (self.infty) { __OUTPUT(*self.infty) }
+#undef __OUTPUT
         if (fst) { out << "0"; fst = false; }
         return out; 
       }
+
+      DERIVE_TUPLE(VirtualTerm, term, epsilon, period, infty)
     };
+
+
+
 
     friend VirtualTerm operator+(Term const& t, Epsilon const) 
     { return VirtualTerm(t) + epsilon; }
@@ -1034,7 +1111,7 @@ namespace viras {
 #define else____(x) .else_([&]() { return x; })
 #define else_is_(x,y) .else_([&]() { assert(x); return y; })
 
-    auto elim_set(Var const& x, LiraLiteral const& lit)
+    auto elim_set(Var x, LiraLiteral const& lit)
     {
       auto t = lit.term;
       auto symbol = lit.symbol;
@@ -1052,26 +1129,26 @@ namespace viras {
                    else_is_(!t.breaks.empty(), [&]() { 
                        auto ebreak       = [&]() { return 
                          iter::if_then_(t.periodic(), 
-                                        iter::array_ptr(t.breaks) 
+                                        iter::array(t.breaks) 
                                           | iter::map([&](auto* b) { return VT(*b); }) )
 
-                               else____(iter::array_ptr(t.breaks) 
+                               else____(iter::array(t.breaks) 
                                           | iter::flat_map([&](auto* b) { return intersectGrid(*b, Bound::Open, t.distXminus(), t.deltaX(), Bound::Open); })
                                           | iter::map([](auto t) { return VT(t); }) )
                        ; };
 
-                       auto breaks_plus_epsilon = [&]() { return iter::array_ptr(t.breaks) | iter::map([](auto* b) { return VT(*b) + epsilon; }); };
+                       auto breaks_plus_epsilon = [&]() { return iter::array(t.breaks) | iter::map([](auto* b) { return VT(*b) + epsilon; }); };
 
                        auto ezero = [&]() { return 
                           iter::if_then_(t.periodic(), 
-                                         iter::array_ptr(t.breaks) 
+                                         iter::array(t.breaks) 
                                            | iter::map([&](auto* b) { return VT::periodic(t.zero(b->t), b->p); }))
 
                                 else_if_(t.oslp == t.sslp,
-                                         iter::array_ptr(t.breaks) 
+                                         iter::array(t.breaks) 
                                            | iter::map([&](auto* b) { return VT(t.zero(b->t)); }))
 
-                                else____(iter::array_ptr(t.breaks) 
+                                else____(iter::array(t.breaks) 
                                            | iter::flat_map([&](auto* b) { return intersectGrid(Break { .t=t.zero(b->t), .p=(1 - t.oslp / t.sslp) },
                                                                                                 Bound::Open, t.distXminus(), t.deltaX(), Bound::Open); })
                                            | iter::map([&](auto t) { return VT(t); }))
@@ -1099,15 +1176,17 @@ namespace viras {
 
     }
 
-    auto elim_set(Var const& x, std::vector<LiraLiteral> lits)
-    { return iter::array(lits) | iter::flat_map([&](auto lit) { return elim_set(x, lit); }); }
+    auto elim_set(Var x, std::vector<LiraLiteral> const& lits)
+    { return iter::array(lits)
+        | iter::flat_map([&](auto lit) { return elim_set(x, *lit); }); }
 
     Literal literal(Term t, PredSymbol s) 
     { return CLiteral { &_config, _config.create_literal(t.inner, s), }; }
 
     Literal literal(bool b) { return literal(term(0), b ? PredSymbol::Eq : PredSymbol::Neq); }
 
-    Literal vsubs_aperiodic0(LiraLiteral const& lit, Var const& x, VirtualTerm vt) {
+    Literal vsubs_aperiodic0(LiraLiteral const& lit, Var x, VirtualTerm vt) {
+      VIRAS_LOG("substituting " << lit << "[ " << x << " // " << vt << " ]")
       auto& s = lit.term;
       auto symbol = lit.symbol;
       assert(!vt.period);
@@ -1149,45 +1228,47 @@ namespace viras {
     }
 
 
-    auto vsubs_aperiodic1(std::vector<LiraLiteral> const& lits, Var const& x, VirtualTerm const& term) {
+    auto vsubs_aperiodic1(std::vector<LiraLiteral> const& lits, Var x, VirtualTerm term) {
+      // VIRAS_LOG((lits) << "[ " << x << " // " << vt << " ]")
       assert(!term.period);
           /* case 2 */
       return iter::array(lits) 
-        | iter::map([&](auto lit) { return vsubs_aperiodic0(lit, x, term); });
+        | iter::map([this, x, term](auto lit) { return vsubs_aperiodic0(*lit, x, term); });
     }
 
-    auto vsubs(std::vector<LiraLiteral> const& lits, Var const& x, VirtualTerm const& vt) {
+    auto vsubs(std::vector<LiraLiteral> const& lits, Var x, VirtualTerm vt) {
       return iter::if_then_(vt.period, ([&](){
                               /* case 1 */
-                              Numeral lambda = *(iter::array(lits)
-                                             | iter::filter([&](auto L) { return L->periodic(); })
-                                             | iter::map([&](auto L) { return L.term.per; })
+                              auto A = [&lits]() { return iter::array(lits) | iter::filter([](auto l) { return !l->periodic(); }); };
+                              auto P = [&lits]() { return iter::array(lits) | iter::filter([](auto l) { return l->periodic(); }); };
+                              Numeral lambda = *(P()
+                                             | iter::map([&](auto L) { return L->term.per; })
                                              | iter::fold([](auto l, auto r) { return lcm(l, r); }));
                               auto iGrid = [this, vt](auto... args) { return intersectGrid(Break { *vt.term, *vt.period, }, args...)
                                                   | iter::map([](auto x) { return VirtualTerm(x); });
                               ; };
-                              auto all_lim_top = [&](Infty i) { return iter::array(lits) | iter::all([&](auto l) { return l.lim(i) == true; }); };
+                              auto all_lim_top = [A](Infty inf) { return A() | iter::all([inf](auto l) { return l->lim(inf) == true; }); };
                               auto one_lambda_plus = [iGrid, vt, lambda](Infty inf) {
                                 return iGrid(Bound::Closed, *vt.term, lambda, Bound::Open) 
                                      | iter::map([&](auto s) { return s + inf; });
                               };
-                              std::optional<LiraLiteral> aperiodic_equality;
+                              std::optional<LiraLiteral const*> aperiodic_equality;
                               auto aperiodic_equality_exists = [&]() -> bool { 
-                                aperiodic_equality = iter::array(lits) 
-                                                   | iter::filter([](auto l) { return !l->periodic() && l->symbol == PredSymbol::Eq; })
-                                                   | iter::min_by_key([](auto l) { return l.term.deltaX(); });
+                                aperiodic_equality = A()
+                                                   | iter::filter([](auto l) { return l->symbol == PredSymbol::Eq; })
+                                                   | iter::min_by_key([](auto l) { return l->term.deltaX(); });
                                 return bool(aperiodic_equality);
                               };
                               auto fin = 
                                 iter::if_then_(all_lim_top( infty), one_lambda_plus( infty))
                                       else_if_(all_lim_top(-infty), one_lambda_plus(-infty))
                                       else_if_(aperiodic_equality_exists(), 
-                                               iGrid(Bound::Closed, aperiodic_equality->term.distXminus(), aperiodic_equality->term.deltaX(), Bound::Closed))
+                                               iGrid(Bound::Closed, (**aperiodic_equality).term.distXminus(), (**aperiodic_equality).term.deltaX(), Bound::Closed))
                                       else____(
-                                            iter::array(lits) 
-                                          | iter::filter([&](auto L) { return !L->periodic() && L->lim_neg_inf() == false; })
+                                            A()
+                                          | iter::filter([&](auto L) { return L->lim(-infty) == false; })
                                           | iter::flat_map([&](auto L) {
-                                                return iGrid(Bound::Closed, L.term.distXminus(), L.term.deltaX() + lambda, Bound::Closed);
+                                                return iGrid(Bound::Closed, L->term.distXminus(), L->term.deltaX() + lambda, Bound::Closed);
                                             })
                                           );
                               return std::move(fin) | iter::map([&](auto t) { return vsubs_aperiodic1(lits, x, t); });
@@ -1195,14 +1276,23 @@ namespace viras {
                    else____(iter::vals(vsubs_aperiodic1(lits, x, vt)));
     }
 
-
-    auto quantifier_elimination(Var const& x, std::vector<LiraLiteral> const& lits)
+    auto quantifier_elimination(Var x, std::vector<LiraLiteral> const& lits)
     {
       return elim_set(x, lits)
-        | iter::flat_map([&](auto t) { return vsubs(lits, x, t); });
+        | iter::dedup()
+        | iter::dbg("elim set elem: ")
+        | iter::flat_map([this,&lits,x](auto t) { return vsubs(lits, x, t); });
     }
 
-    auto quantifier_elimination(typename Config::Var const& x, std::vector<LiraLiteral> const& lits)
+    auto quantifier_elimination(typename Config::Var x, Literals const& ls)
+    {
+      auto lits = std::make_unique<std::vector<LiraLiteral>>(analyse(ls, x));
+      return quantifier_elimination(CVar { &_config, x }, *lits)
+        | iter::inspect([ /* we store the pointer to the literals in this closure */ lits = std::move(lits)](auto) { })
+        | iter::map([&](auto lits) { return std::move(lits) | iter::map([](auto lit) { return lit.inner; }); });
+    }
+
+    auto quantifier_elimination(typename Config::Var x, std::vector<LiraLiteral> const& lits)
     {
       return quantifier_elimination(CVar { &_config, x }, lits)
         | iter::map([&](auto lits) { return std::move(lits) | iter::map([](auto lit) { return lit.inner; }); });
@@ -1214,3 +1304,13 @@ namespace viras {
 
 
 }
+
+// namespace std {
+//   template<class C>
+//   struct hash<viras::Viras<C>::VirtualTerm> {
+//     size_t operator()(VirtualTerm const& self) {
+//       assert(false);
+//       return 0;
+//     }
+//   }
+// }
