@@ -517,22 +517,18 @@ namespace viras {
 
     Term mul(Numeral l, Term r) { 
       auto dflt = [&](auto...) { return config.mul(l,r); };
-      auto out =
+      return
              l == numeral(0) ? term(numeral(0))
            : l == numeral(1) ? r
            : matchTerm(r, 
              /* var v */ dflt, 
 
              /* numeral 1 */ [&]() { return term(l); }, 
-             /* k * t */ [&](auto k, auto t) { 
-               return mul(mul(l, k), t);
-             }, 
+             /* k * t */ [&](auto k, auto t) { return mul(mul(l, k), t); }, 
 
              /* l + r */ dflt, 
 
              /* floor */ dflt);
-      DBG("mul ", l, " ", r, "  ==> ", out);
-      return out;
     }
 
 
