@@ -501,23 +501,96 @@ namespace viras {
     Numeral add(Numeral l, Numeral r) { return config.add(l,r); }
     Numeral floor(Numeral t) { return config.floor(t); }
 
-    Term simpl(Term t) { return t; } // TODO
-
+    Term simpl(Term self) { 
+      auto dflt = [&](auto...) { return self; };
+      return matchTerm(self, 
+        /* var v */ dflt,
+        /* numeral 1 */ dflt,
+        /* k * t */ [&](auto k, auto t) { return mul(k, simpl(t)); }, 
+        /* l + r */ [&](auto l, auto r) { return add(simpl(l), simpl(r)); }, 
+        /* floor */ [&](auto t) { return floor(simpl(t)); }
+        );
+    } // TODO
 
     Term term(Numeral n) { return config.term(n); }
     Term term(Var v) { return config.term(v); }
 
-    Term mul(Numeral l, Term r) { return simpl(config.mul(l,r)); }
-    Term add(Term l, Term r) { return simpl(config.add(l,r)); }
-    Term floor(Term t) { return simpl(config.floor(t)); }
+    Term mul(Numeral l, Term r) { 
+      auto dflt = [&](auto...) { return config.mul(l,r); };
+      auto out =
+             l == numeral(0) ? term(numeral(0))
+           : l == numeral(1) ? r
+           : matchTerm(r, 
+             /* var v */ dflt, 
+
+             /* numeral 1 */ [&]() { return term(l); }, 
+             /* k * t */ [&](auto k, auto t) { 
+               return mul(mul(l, k), t);
+             }, 
+
+             /* l + r */ dflt, 
+
+             /* floor */ dflt);
+      DBG("mul ", l, " ", r, "  ==> ", out);
+      return out;
+    }
+
+
+
+
+    bool isOne(Term t) { 
+      return matchTerm(t, 
+      /* var v */ [&](auto y) { return false; }, 
+      /* numeral 1 */ [&]() { return true; }, 
+      /* k * t */ [&](auto k, auto t) { return false; }, 
+      /* l + r */ [&](auto l, auto r) { return false; }, 
+      /* floor */ [&](auto t) { return false; }
+      ); 
+    }
+
+    bool isZero(Term t) { 
+      return matchTerm(t, 
+      /* var v */ [&](auto y) { return false; }, 
+      /* numeral 1 */ [&]() { return false; }, 
+      /* k * t */ [&](auto k, auto t) { return k == numeral(0); }, 
+      /* l + r */ [&](auto l, auto r) { return false; }, 
+      /* floor */ [&](auto t) { return false; }
+      ); 
+    }
+
+    std::optional<Numeral> tryNumeral(Term t) { 
+      return matchTerm(t, 
+        /* var v */ [&](auto y) { return std::optional<Numeral>(); }, 
+        /* numeral 1 */ [&]() { return std::optional<Numeral>(); }, 
+        /* k * t */ [&](auto k, auto t) { 
+          return isOne(t) ? std::optional<Numeral>(k)
+                          : std::optional<Numeral>();
+        }, 
+        /* l + r */ [&](auto l, auto r) { return std::optional<Numeral>(); }, 
+        /* floor */ [&](auto t) { return std::optional<Numeral>(); }); 
+    };
+
+
+    Term add(Term l, Term r) { 
+
+      auto numL = tryNumeral(l);
+      auto numR = tryNumeral(r);
+
+      return isZero(l) ? r 
+           : isZero(r) ? l
+           : numL && numR ? term(*numL + *numR)
+           : config.add(l,r); 
+    }
+
+    Term floor(Term t) { 
+      auto tNum = tryNumeral(t);
+      return tNum ? term(floor(*tNum)) : config.floor(t); 
+    }
 
     Numeral inverse(Numeral n) { return config.inverse(n); }
 
     bool less(Numeral l, Numeral r) { return config.less(l,r); }
     bool leq(Numeral l, Numeral r) { return config.leq(l,r); }
-
-    Term subs(Term term, Var var, Term by) 
-    { return simpl(config.subs(term,var,by)); }
 
     PredSymbol symbol_of_literal(Literal l) 
     { return config.symbol_of_literal(l); }
@@ -742,9 +815,24 @@ namespace viras {
     friend CTerm quot(CTerm t, CNumeral p) { return floor(t / p); }
     friend CTerm rem(CTerm t, CNumeral p) { return t - p * quot(t, p); }
 
-    friend CTerm subs(CTerm t, CVar v, CTerm by) {
-      return Term { t.config, t.config->subs(t.inner, v.inner, by.inner), };
+    friend CTerm subs(CTerm self, CVar var, CTerm by) {
+      return matchTerm(self, 
+        /* var y */ [&](auto v) { return v == var ? by : self; }, 
+
+        /* numeral 1 */ [&]() { return self; }, 
+        /* k * t */ [&](auto k, auto t) { return k * subs(t, var, by); }, 
+
+        /* l + r */ [&](auto l, auto r) { 
+          return subs(l,var,by) + subs(r,var,by);
+        }, 
+
+        /* floor */ [&](auto t) { return floor(subs(t,var,by)); });
     }
+
+
+    // friend CTerm subs(CTerm t, CVar v, CTerm by) {
+    //   return Term { t.config, t.config->subs(t.inner, v.inner, by.inner), };
+    // }
 
     
     // END OF SYNTAX SUGAR STUFF
@@ -855,19 +943,19 @@ namespace viras {
     };
 
     template<class IfVar, class IfOne, class IfMul, class IfAdd, class IfFloor>
-    auto matchTerm(Term t, 
+    friend auto matchTerm(Term t, 
         IfVar   if_var, 
         IfOne   if_one, 
         IfMul   if_mul, 
         IfAdd   if_add, 
         IfFloor if_floor
         ) -> decltype(auto) {
-      return _config.matchTerm(t.inner,
-        [&](auto x) { return if_var(CVar{ &_config, x }); }, 
+      return t.config->matchTerm(t.inner,
+        [&](auto x) { return if_var(CVar{ t.config, x }); }, 
         [&]() { return if_one(); }, 
-        [&](auto l, auto r) { return if_mul(CNumeral{&_config, l},CTerm{&_config, r}); }, 
-        [&](auto l, auto r) { return if_add(CTerm{&_config, l},CTerm{&_config, r}); }, 
-        [&](auto x) { return if_floor(CTerm{&_config, x}); }
+        [&](auto l, auto r) { return if_mul(CNumeral{t.config, l},CTerm{t.config, r}); }, 
+        [&](auto l, auto r) { return if_add(CTerm{t.config, l},CTerm{t.config, r}); }, 
+        [&](auto x) { return if_floor(CTerm{t.config, x}); }
            );
     }
 
@@ -902,7 +990,7 @@ namespace viras {
     }
 
     LiraTerm analyse(Term self, Var x) {
-      return matchTerm(self, 
+      return matchTerm(self,
         /* var v */ [&](auto y) { 
         return LiraTerm {
           .self = self,
