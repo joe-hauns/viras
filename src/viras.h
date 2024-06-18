@@ -1,7 +1,9 @@
 #include <optional>
 #include <iostream>
 #include <set>
+#include <map>
 #include <cassert>
+#include <tuple>
 
 #pragma once
 
@@ -18,6 +20,20 @@
 
 
 namespace viras {
+
+  template<class C>
+  struct OutputPtr  { C const& self; };
+  template<class C>
+  OutputPtr<C> outputPtr(C const& c)  { return OutputPtr<C> { c }; }
+
+  template<class C>
+  std::ostream& operator<<(std::ostream& out, OutputPtr<C*> const& self)
+  { return self.self == nullptr ? out << "nullptr" : out << *self.self; }
+
+  template<class C>
+  std::ostream& operator<<(std::ostream& out, OutputPtr<C> const& self)
+  { return out << self.self; }
+
 
   template<class T>
   T dummyVal();
@@ -37,7 +53,7 @@ namespace viras {
       Op self;
       template<class I>
       friend auto operator|(I iter, IterCombinator self) -> decltype(auto) 
-      { return (self.self)(iter); }
+      { return (self.self)(std::move(iter)); }
 
       template<class Op2>
       auto compose(IterCombinator<Op2> other) {
@@ -61,6 +77,15 @@ namespace viras {
         }
       });
     };
+
+    template<class C = size_t>
+    auto count() {
+      return iterCombinator([](auto iter) {
+          C out = 0;
+          std::move(iter) | foreach([&](auto) { return out = out + 1; });
+          return out;
+      });
+    }
 
 
     constexpr auto fold = [](auto f) {
@@ -251,7 +276,7 @@ namespace viras {
 
     template<class M>
     auto dbg(M msg) {
-      return inspect([msg = std::move(msg)](auto x) { VIRAS_LOG(msg << ": " << x); });
+      return inspect([msg = std::move(msg)](auto x) { VIRAS_LOG(msg << ": " << outputPtr(x)); });
     }
 
     constexpr auto flat_map = [](auto f) {
@@ -275,11 +300,32 @@ namespace viras {
     RangeIter<U> range(L lower, U upper)
     { return RangeIter<U>{U(std::move(lower)), std::move(upper)}; }
 
-    // template<class Array>
-    // auto array(Array && a)
-    // { return range(0, a.size())
-    //    | map([a = std::move(a)](auto i) { return std::move(a[i]); }); }
+    template<class Begin, class End>
+    struct StlIter {
+      Begin cur;
+      End end;
+      using val_t = std::remove_reference_t<decltype(*cur)>*;
 
+      std::optional<val_t> next()
+      {
+        if (cur != end)  {
+          std::optional<val_t> out(&*cur);
+          cur++;
+          return out;
+        } else {
+          return std::optional<val_t>();
+        }
+      }
+    };
+
+
+    template<class StlIterable>
+    auto stl(StlIterable const& a)
+    { return StlIter<decltype(a.begin()), decltype(a.end())> { a.begin(), a.end() }; }
+
+    template<class StlIterable>
+    auto stl(StlIterable& a)
+    { return StlIter<decltype(a.begin()), decltype(a.end())> { a.begin(), a.end() }; }
 
     template<class Array, 
       std::enable_if_t<std::is_reference_v<decltype(dummyVal<Array>()[0])>, bool> = true
@@ -376,7 +422,8 @@ namespace viras {
         template<class Out>
         static std::optional<Out> apply(IfThen& self) {
           if (std::get<i>(self._conds)()) {
-            return std::optional<Out>(Out(std::in_place_index_t<i>(), std::get<i>(self._thens)()));
+            auto then = std::get<i>(self._thens)();
+            return std::optional<Out>(Out(std::in_place_index_t<i>(), std::move(then)));
           } else {
             return __TryIfThen<i + 1, sz>::template apply<Out>(self);
           }
@@ -412,6 +459,12 @@ namespace viras {
     template<class Cond, class Then>
     auto if_then(Cond c, Then t)
     { return IfThen<std::tuple<Cond>,Then> { std::make_tuple(std::move(c)), t }; }
+
+#define if_then_(x, y) if_then([&]() { return x; }, [&]() { return y; }) 
+#define else_if_(x, y) .else_if([&]() { return x; }, [&]() { return y; })
+#define else____(x) .else_([&]() { return x; })
+#define else_is_(x,y) .else_([&]() { assert(x); return y; })
+
 
     template<class I, class... Is>
     struct ConcatIter {
@@ -526,13 +579,10 @@ namespace viras {
              /* numeral 1 */ [&]() { return term(l); }, 
              /* k * t */ [&](auto k, auto t) { return mul(mul(l, k), t); }, 
 
-             /* l + r */ dflt, 
+             /* l + r */ [&](auto r0, auto r1) { return add(mul(l, r0), mul(l, r1)); }, 
 
              /* floor */ dflt);
     }
-
-
-
 
     bool isOne(Term t) { 
       return matchTerm(t, 
@@ -557,7 +607,7 @@ namespace viras {
     std::optional<Numeral> tryNumeral(Term t) { 
       return matchTerm(t, 
         /* var v */ [&](auto y) { return std::optional<Numeral>(); }, 
-        /* numeral 1 */ [&]() { return std::optional<Numeral>(); }, 
+        /* numeral 1 */ [&]() { return std::optional<Numeral>(numeral(1)); }, 
         /* k * t */ [&](auto k, auto t) { 
           return isOne(t) ? std::optional<Numeral>(k)
                           : std::optional<Numeral>();
@@ -566,21 +616,138 @@ namespace viras {
         /* floor */ [&](auto t) { return std::optional<Numeral>(); }); 
     };
 
+    template<class F>
+    auto for_monom2(Term self, F f) {
+      auto dflt = [&](auto...args){ f(numeral(1), self); return std::make_tuple(); };
+      matchTerm(self, 
+        /* var v */ dflt, 
+
+        /* numeral 1 */ dflt,
+        /* k * t */ [&](auto k, auto t) { 
+          f(k, t);  
+          return std::make_tuple(); 
+        }, 
+        // /* k * t */ [&](auto k, auto t) { f(k, t);  return std::make_tuple(); }, 
+
+        /* l + r */ [&](auto l, auto r) { 
+          for_monom2(l, f);
+          for_monom2(r, f);
+          return std::make_tuple();
+        }, 
+
+        /* floor */ dflt
+        );
+    }
+
+
+
+
+    template<class F>
+    void __for_monom(Term const& self, F& f, Numeral& prod) {
+      auto dflt = [&](auto...args){ f(prod, self); return std::make_tuple(); };
+      matchTerm(self, 
+        /* var v */ dflt, 
+
+        /* numeral 1 */ dflt,
+        /* k * t */ [&](auto k, auto t) { 
+          if (k != numeral(0)) {
+            prod = prod * k;
+            __for_monom(t, f, prod);
+            prod = prod / k;
+          }
+          return std::make_tuple(); 
+        }, 
+        // /* k * t */ [&](auto k, auto t) { f(k, t);  return std::make_tuple(); }, 
+
+        /* l + r */ [&](auto l, auto r) { 
+          __for_monom(l, f, prod);
+          __for_monom(r, f, prod);
+          return std::make_tuple();
+        }, 
+
+        /* floor */ dflt
+        );
+    }
+
+
+    template<class F>
+    void for_monom(Term self, F f) {
+      auto prod = numeral(1);
+      __for_monom(self, f, prod);
+    }
+
+    template<class Iter>
+    Term iterToSum(Iter iter) {
+      auto res = std::move(iter)
+        | iter::filter([this](auto& pair)  { return pair->second != numeral(0); })
+        | iter::map([this](auto pair) { return this->mul(pair->second, pair->first); })
+        | iter::fold([this](auto l, auto r) { return config.add(l, r); });
+      return res ? *res : config.term(config.numeral(0));
+    }
 
     Term add(Term l, Term r) { 
 
-      auto numL = tryNumeral(l);
-      auto numR = tryNumeral(r);
+      std::map<Term, Numeral> summands;
+      auto addUp = [&](auto t) {
+        for_monom(t, [&](Numeral n, Term t) {
+            auto res_iter = summands.insert(std::make_pair(t, numeral(0))).first;
+            auto& res = (*res_iter).second;
+            res = config.add(res, n);
+        });
+      };
+      addUp(l);
+      addUp(r);
 
-      return isZero(l) ? r 
-           : isZero(r) ? l
-           : numL && numR ? term(*numL + *numR)
-           : config.add(l,r); 
+      return iterToSum(iter::stl(summands));
+
+
+      // auto numL = tryNumeral(l);
+      // auto numR = tryNumeral(r);
+      //
+      // return isZero(l) ? r 
+      //      : isZero(r) ? l
+      //      : numL && numR ? term(config.add(*numL, *numR))
+      //      : config.add(l,r); 
     }
 
     Term floor(Term t) { 
-      auto tNum = tryNumeral(t);
-      return tNum ? term(floor(*tNum)) : config.floor(t); 
+      std::map<Term, Numeral> outer;
+      std::map<Term, Numeral> inner;
+
+      auto update = [&](auto& map, auto key, auto f) {
+        auto iter = map.insert(std::make_tuple(key,numeral(0))).first;
+        auto& val = iter->second;
+        val = f(val);
+      };
+      for_monom(t, [&](Numeral l, Term r) {
+          auto integral = matchTerm(r, 
+            /* var v */     [&](auto...) {                return false; }, 
+            /* numeral 1 */ [&](auto...) {                return true;  }, 
+            /* k * t */     [&](auto...) { assert(false); return false; }, 
+            /* l + r */     [&](auto...) { assert(false); return false; }, 
+            /* floor */     [&](auto...) {                return true;  });
+          if (integral) {
+            update(outer, r, [&](auto i)  { return i +      config.floor(l) ; });
+            update(inner, r, [&](auto i) { return i + (l - config.floor(l)); });
+          } else {
+            update(inner, r, [&](auto i) { return i + l; });
+          }
+      });
+
+      auto in_t = iterToSum(iter::stl(inner));
+      auto num = tryNumeral(in_t);
+      if (num) {
+        auto fnum = config.floor(*num);
+        if (fnum != numeral(0)) {
+          update(outer, term(numeral(1)), [&](auto n) { return n + fnum; });
+        }
+      } else {
+        update(outer, config.floor(in_t), [&](auto n) { return n + numeral(1); });
+      }
+      return iterToSum(iter::stl(outer));
+
+      // auto tNum = tryNumeral(t);
+      // return tNum ? term(floor(*tNum)) : config.floor(t); 
     }
 
     Numeral inverse(Numeral n) { return config.inverse(n); }
@@ -609,7 +776,7 @@ namespace viras {
         IfOne   if_one, 
         IfMul   if_mul, 
         IfAdd   if_add, 
-        IfFloor if_floor) -> decltype(auto) {
+        IfFloor if_floor) -> decltype(if_one()) {
       return config.matchTerm(t,if_var,if_one,if_mul,if_add,if_floor);
     }
   };
@@ -619,7 +786,10 @@ namespace viras {
   auto simplifyingConfig(Config c)
   { return SimplifyingConfig<Config>(std::move(c)); }
 
-  template<class Config>
+  template<class Config
+    , bool optimizeBounds = true
+    , bool optimizeGridIntersection = false
+    >
   class Viras {
 
   // START OF SYNTAX SUGAR STUFF
@@ -631,7 +801,7 @@ namespace viras {
       friend bool operator!=(WithConfig l, WithConfig r) 
       { return !(l == r); }
       friend std::ostream& operator<<(std::ostream& out, WithConfig const& self)
-      { return out << self.inner; }
+      { return out << outputPtr(self.inner); }
       DERIVE_TUPLE(WithConfig, inner)
     };
 
@@ -850,6 +1020,8 @@ namespace viras {
     struct Break {
       Term t;
       Numeral p;
+      friend std::ostream& operator<<(std::ostream& out, Break const& self)
+      { return out << self.t << " + " << self.p << "ℤ"; }
     };
 
     template<class L, class R> struct Add { L l; R r; };
@@ -973,20 +1145,293 @@ namespace viras {
           case Bound::Closed: return grid_ceil(t, s_pZ);
         };
       }();
-      return iter::nat_iter(numeral(0))
-        | iter::take_while([r,p,k](auto n) -> bool { 
-            switch(r) {
-              case Bound::Open:   return n * p < k; 
-              case Bound::Closed: return n * p <= k; 
-            }
-          })
-        | iter::map([start, p](auto n) {
-          return start + p * n;
-          });
+      DBGE(t)
+      DBGE(start)
+      assert(k != 0 || (l == Bound::Closed && r == Bound::Closed));
+      return iter::if_then_(optimizeGridIntersection && k == 0, iter::vals(start))
+                   else____(iter::nat_iter(numeral(0))
+                              | iter::take_while([r,p,k](auto n) -> bool { 
+                                  switch(r) {
+                                    case Bound::Open:   return n * p < k; 
+                                    case Bound::Closed: return n * p <= k; 
+                                  }
+                                })
+                              | iter::map([start, p](auto n) {
+                                return start + p * n;
+                                }));
+                   
+    }
+
+    // TODO get rid of implicit copies of LiraTerm
+
+    // template<class MatchRec>
+    // Numeral calcDeltaY(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+    //    return self.per == 0 
+    //      ? numeral(0) 
+    //      : matchRec(
+    //     /* var y */ [&](auto y) 
+    //     { return numeral(0); },
+    //
+    //     /* numeral 1 */ [&]() 
+    //     { return numeral(0); },
+    //
+    //     /* k * t */ [&](auto k, auto t, auto rec) 
+    //     { return  abs(k) * rec->deltaY; }, 
+    //
+    //     /* l + r */ [&](auto l, auto r, auto& rec_l, auto& rec_r) 
+    //     { return rec_l.deltaY + rec_r.deltaY; },
+    //
+    //     /* floor t */   [&](auto t, auto& rec) 
+    //     { return rec.deltaY + 1; }
+    //     );
+    // }
+
+
+    template<class MatchRec>
+    Term calcLim(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+       return matchRec(
+        /* var y */ [&](auto y) 
+        { return self.self; },
+
+        /* numeral 1 */ [&]() 
+        { return self.self; },
+
+        /* k * t */ [&](auto k, auto t, auto& rec) 
+        { return rec.per == 0 ? self.self : k * rec.lim; },
+
+        /* l + r */ [&](auto l, auto r, auto& rec_l, auto& rec_r) 
+        { return self.per == 0 ? self.self : rec_l.lim + rec_r.lim; },
+
+        /* floor t */   [&](auto t, auto& rec) 
+        { return self.per == 0      ? self.self
+               : rec.sslp >= 0 ? floor(rec.lim) 
+                                 : ceil(rec.lim) - 1; }
+        );
+    }
+
+
+    template<class MatchRec>
+    Numeral calcPer(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+       return matchRec(
+        /* var y */ [&](auto y) 
+        { return numeral(0); },
+
+        /* numeral 1 */ [&]() 
+        { return numeral(0); },
+
+        /* k * t */ [&](auto k, auto t, auto& rec) 
+        { return rec.per; },
+
+        /* l + r */ [&](auto l, auto r, auto& rec_l, auto& rec_r) 
+        { return rec_l.per == 0 ? rec_r.per
+               : rec_r.per == 0 ? rec_l.per
+               : lcm(rec_l.per, rec_r.per); },
+
+        /* floor t */   [&](auto t, auto& rec) 
+        { return rec.per == 0 && rec.oslp == 0 ? numeral(0)
+               : rec.per == 0                  ? 1 / abs(rec.oslp)
+               : num(rec.per) * den(rec.oslp); }
+        );
+    }
+
+    template<class MatchRec>
+    Numeral calcSslp(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+       return matchRec(
+        /* var y */ [&](auto y) 
+        { return numeral(y == x ? 1 : 0); }
+
+        /* numeral 1 */ , [&]() 
+        { return numeral(0); }
+
+        /* k * t */ , [&](auto k, auto t, auto& rec) 
+        { return k * rec.sslp; }
+
+        /* l + r */ , [&](auto l, auto r, auto& rec_l, auto& rec_r) 
+        { return rec_l.sslp + rec_r.sslp; }
+
+        /* floor t */ , [&](auto t, auto& rec) 
+        { return numeral(0); }
+        );
+    }
+
+
+    template<class MatchRec>
+    Numeral calcOslp(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+       return matchRec(
+        /* var y */ [&](auto y) 
+        { return numeral(y == x ? 1 : 0); }
+
+        /* numeral 1 */ , [&]() 
+        { return numeral(0); }
+
+        /* k * t */ , [&](auto k, auto t, auto& rec) 
+        { return k * rec.oslp; }
+
+        /* l + r */ , [&](auto l, auto r, auto& rec_l, auto& rec_r) 
+        { return rec_l.oslp + rec_r.oslp; }
+
+        /* floor t */ , [&](auto t, auto& rec) 
+        { return rec.oslp; }
+        );
+    }
+
+
+    template<class MatchRec>
+    Numeral calcDeltaY(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+       return matchRec(
+        /* var y */ [&](auto y) 
+        { return numeral(0); }
+
+        /* numeral 1 */ , [&]() 
+        { return numeral(0); }
+
+        /* k * t */ , [&](auto k, auto t, auto& rec) 
+        { return abs(k) * rec.deltaY; }
+
+        /* l + r */ , [&](auto l, auto r, auto& rec_l, auto& rec_r) 
+        { return rec_l.deltaY + rec_r.deltaY; }
+
+        /* floor t */ , [&](auto t, auto& rec)  {
+          assert(self.per != 0 || rec.per == 0);
+          return optimizeBounds 
+               ? (self.per == 0 ? numeral(0) : rec.deltaY + 1)
+               :                               rec.deltaY + 1 ; 
+        }
+        );
+    }
+
+
+    template<class MatchRec>
+    Term calcDistYminus(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+       return matchRec(
+        /* var y */ [&](auto y) 
+        { return y == x ? term(0) : term(y); }
+
+        /* numeral 1 */ , [&]() 
+        { return term(numeral(1)); }
+
+        /* k * t */ , [&](auto k, auto t, auto& rec) 
+        { return k >= 0 ? k * rec.distYminus : k * rec.distYplus(); }
+
+        /* l + r */ , [&](auto l, auto r, auto& rec_l, auto& rec_r) 
+        { return rec_l.distYminus + rec_r.distYminus; }
+
+        /* floor t */ , [&](auto t, auto& rec) 
+        { 
+          assert(self.per != 0 || rec.per == 0);
+          return optimizeBounds 
+               ? (self.per == 0 ? floor(rec.distYminus) :  rec.distYminus - 1)
+               :                                            rec.distYminus - 1 ; }
+        );
+    }
+
+
+    template<class MatchRec>
+    std::vector<Break> calcBreaks(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+       return matchRec(
+        /* var y */ [&](auto y) 
+        { return std::vector<Break>(); }
+
+        /* numeral 1 */ , [&]() 
+        { return std::vector<Break>(); }
+
+        /* k * t */ , [&](auto k, auto t, auto& rec) 
+        { return std::move(rec.breaks); }
+
+        /* l + r */ , [&](auto l, auto r, auto& rec_l, auto& rec_r)  {
+          auto breaks = std::move(rec_l.breaks);
+          breaks.insert(breaks.end(), rec_r.breaks.begin(), rec_r.breaks.end());
+          return breaks;
+        }
+
+        /* floor t */ , [&](auto t, auto& rec)  {
+        if (rec.sslp == 0) {
+          return std::move(rec.breaks);
+        } else if (rec.breaks.empty()) {
+          return std::vector<Break>{Break {rec.zero(term(0)), self.per}};
+        } else {
+          auto p_min = *(iter::array(rec.breaks) 
+            | iter::map([](auto b) -> Numeral { return b->p; })
+            | iter::min);
+          auto breaks = std::vector<Break>();
+          for ( auto b0p_pZ : rec.breaks ) {
+            auto b0p = b0p_pZ.t;
+            auto p   = b0p_pZ.p;
+            intersectGrid(b0p_pZ, 
+                          Bound::Closed, b0p, self.per, Bound::Open) 
+              | iter::foreach([&](auto b0) {
+                  intersectGrid(Break{rec.zero(b0), 1/rec.sslp}, 
+                                Bound::Closed, b0, p_min, Bound::Open)
+                    | iter::foreach([&](auto b) {
+                        breaks.push_back(Break{b, self.per });
+                    });
+              });
+          }
+          breaks.insert(breaks.end(), rec.breaks.begin(), rec.breaks.end());
+          return breaks;
+        }
+        }
+        );
+    }
+
+    LiraTerm analyse2(Term self, Var x) {
+      LiraTerm rec0;
+      LiraTerm rec1;
+      matchTerm(self, 
+        /* var v */ [&](auto y) { return std::make_tuple(); }, 
+        /* numeral 1 */ [&]() { return std::make_tuple(); }, 
+        /* k * t */ [&](auto k, auto t) { 
+          rec0 = analyse2(t, x);
+          return std::make_tuple();
+        }, 
+
+        /* l + r */ [&](auto l, auto r) { 
+          rec0 = analyse2(l, x);
+          rec1 = analyse2(r, x);
+          return std::make_tuple();
+        }, 
+
+        /* floor */ [&](auto t) { 
+          rec0 = analyse2(t, x);
+          return std::make_tuple();
+        });
+      auto matchRec = [&](auto if_var, auto if_one, auto if_mul, auto if_add, auto if_floor) {
+        return matchTerm(self, 
+        /* var v */ if_var,
+        /* numeral 1 */ if_one,
+        /* k * t */ [&](auto k, auto t) { return if_mul(k, t, rec0); }, 
+        /* l + r */ [&](auto l, auto r) { return if_add(l, r, rec0, rec1); }, 
+        /* floor */ [&](auto t) { return if_floor(t, rec0); });
+      };
+      LiraTerm res;
+      res.self = self;
+      res.x = x;
+      res.per = calcPer(res, x, matchRec);
+      res.lim = calcLim(res, x, matchRec);
+      res.sslp = calcSslp(res, x, matchRec);
+      res.oslp = calcOslp(res, x, matchRec);
+      res.deltaY = calcDeltaY(res, x, matchRec);
+      res.distYminus = calcDistYminus(res, x, matchRec);
+      res.breaks = calcBreaks(res, x, matchRec);
+      
+#define DEBUG_FIELD(field) \
+        DBG("analyse2(", res.self, ")." #field " = ", res.field)
+        // DEBUG_FIELD(breaks.size())
+        // iter::array(res.breaks) | iter::dbg("break") | iter::foreach([](auto...){});
+        // DBG("")
+        // DEBUG_FIELD(per)
+        // DEBUG_FIELD(deltaY)
+        // DBG("")
+
+        if (optimizeBounds) {
+          assert(res.per != 0 || res.deltaY == 0);
+        }
+        assert((res.per == 0) == (res.breaks.size() == 0));
+        return res;
     }
 
     LiraTerm analyse(Term self, Var x) {
-      return matchTerm(self,
+      auto res = matchTerm(self,
         /* var v */ [&](auto y) { 
         return LiraTerm {
           .self = self,
@@ -1035,7 +1480,7 @@ namespace viras {
                  : rec_r.per == 0 ? rec_l.per
                  : lcm(rec_l.per, rec_r.per);
           auto breaks = std::move(rec_l.breaks);
-          breaks.insert(breaks.end(), rec_l.breaks.begin(), rec_l.breaks.end());
+          breaks.insert(breaks.end(), rec_r.breaks.begin(), rec_r.breaks.end());
           return LiraTerm {
             .self = self,
             .x = x,
@@ -1049,7 +1494,7 @@ namespace viras {
           }; 
         }, 
 
-        /* floor */ [&](auto t) { 
+        /* floor t */ [&](auto t) { 
           auto rec = analyse(t, x);
           auto per = rec.per == 0 && rec.oslp == 0 ? numeral(0)
                    : rec.per == 0                  ? 1 / abs(rec.oslp)
@@ -1064,8 +1509,12 @@ namespace viras {
             .sslp = numeral(0),
             .oslp = rec.oslp,
             .per = per,
-            .deltaY = rec.deltaY + 1,
-            .distYminus = rec.distYminus - 1,
+            .deltaY = optimizeBounds 
+              ? (rec.per == 0 ? numeral(0) : rec.deltaY + 1)
+              :                              rec.deltaY + 1 ,
+            .distYminus = optimizeBounds 
+              ? (rec.per == 0 ? rec.distYminus : rec.distYminus - 1)
+              :                                  rec.distYminus - 1 ,
             .breaks = std::vector<Break>(),
           }; 
           if (rec.sslp == 0) {
@@ -1094,10 +1543,24 @@ namespace viras {
           return out;
         }
         );
+#define DEBUG_FIELD(field) \
+        DBG("analyse(", res.self, ")." #field " = ", res.field)
+        // DEBUG_FIELD(breaks.size())
+        // iter::array(res.breaks) | iter::dbg("break") | iter::foreach([](auto...){});
+        // DBG("")
+        // DEBUG_FIELD(per)
+        // DEBUG_FIELD(deltaY)
+        // DBG("")
+
+        if (optimizeBounds) {
+          assert(res.per != 0 || res.deltaY == 0);
+        }
+        assert((res.per == 0) == (res.breaks.size() == 0));
+        return res;
     };
 
     LiraLiteral analyse(Literal self, Var x) 
-    { return LiraLiteral { analyse(self.term(), x), self.symbol() }; }
+    { return LiraLiteral { analyse2(self.term(), x), self.symbol() }; }
 
     std::vector<LiraLiteral> analyse(Literals const& self, Var x) 
     { 
@@ -1190,14 +1653,9 @@ namespace viras {
     }
 
 
-#define if_then_(x, y) if_then([&]() { return x; }, [&]() { return y; }) 
-#define else_if_(x, y) .else_if([&]() { return x; }, [&]() { return y; })
-#define else____(x) .else_([&]() { return x; })
-#define else_is_(x,y) .else_([&]() { assert(x); return y; })
-
     auto elim_set(Var x, LiraLiteral const& lit)
     {
-      auto t = lit.term;
+      auto& t = lit.term;
       auto symbol = lit.symbol;
       auto isIneq = [](auto symbol) { return (symbol == PredSymbol::Geq || symbol == PredSymbol::Gt); };
       using VT = VirtualTerm;
@@ -1208,10 +1666,13 @@ namespace viras {
                                  else_if_(symbol == PredSymbol:: Eq, iter::vals<VT>(t.zero(term(0))))
                                  else_if_(t.sslp < 0               , iter::vals<VT>(-infty))
                                  else_if_(symbol == PredSymbol::Geq, iter::vals<VT>(t.zero(term(0))))
-                                 else_is_(symbol == PredSymbol::Gt , iter::vals<VT>(t.zero(term(0)) + epsilon)))
+                                 else_is_(symbol == PredSymbol::Gt , iter::vals<VT>(t.zero(term(0)) + epsilon))
+                                 | iter::dbg("lra term")
+                                 )
 
                    else_is_(!t.breaks.empty(), [&]() { 
-                       auto ebreak       = [&]() { return 
+                       auto ebreak       = [&]() {
+                       return 
                          iter::if_then_(t.periodic(), 
                                         iter::array(t.breaks) 
                                           | iter::map([&](auto* b) { return VT(*b); }) )
@@ -1219,11 +1680,14 @@ namespace viras {
                                else____(iter::array(t.breaks) 
                                           | iter::flat_map([&](auto* b) { return intersectGrid(*b, Bound::Open, t.distXminus(), t.deltaX(), Bound::Open); })
                                           | iter::map([](auto t) { return VT(t); }) )
+                       | iter::dbg("ebreak")
                        ; };
 
-                       auto breaks_plus_epsilon = [&]() { return iter::array(t.breaks) | iter::map([](auto* b) { return VT(*b) + epsilon; }); };
+                       auto breaks_plus_epsilon = [&]() { return ebreak() | iter::map([](auto vt) { return vt + epsilon; })
+                       ; };
 
-                       auto ezero = [&]() { return 
+                       auto ezero = [&]() { 
+                       return 
                           iter::if_then_(t.periodic(), 
                                          iter::array(t.breaks) 
                                            | iter::map([&](auto* b) { return VT::periodic(t.zero(b->t), b->p); }))
@@ -1237,22 +1701,28 @@ namespace viras {
                                                                                                 Bound::Open, t.distXminus(), t.deltaX(), Bound::Open); })
                                            | iter::map([&](auto t) { return VT(t); }))
                                          
+                                 | iter::dbg("ezero")
                        ; };
-                       auto eseg         = [&]() { return 
-                           iter::if_then_(t.sslp == 0 || ( t.sslp < 0 && isIneq(symbol)), 
-                                          breaks_plus_epsilon())
+                       auto eseg         = [&]() { 
+                         return 
+                           iter::if_then_(t.sslp == 0 || ( t.sslp < 0 && isIneq(symbol)), breaks_plus_epsilon())
                                  else_if_(t.sslp >  0 && symbol == PredSymbol::Geq, iter::concat(breaks_plus_epsilon(), ezero()))
                                  else_if_(t.sslp >  0 && symbol == PredSymbol::Gt , iter::concat(breaks_plus_epsilon(), ezero() | iter::map([](auto x) { return x + epsilon; })))
                                  else_if_(t.sslp != 0 && symbol == PredSymbol::Neq, iter::concat(breaks_plus_epsilon(), ezero() | iter::map([](auto x) { return x + epsilon; })))
                                  else_is_(t.sslp != 0 && symbol == PredSymbol::Eq,  ezero())
+                                 | iter::dbg("eseg")
                        ; };
                        auto ebound_plus  = [&]() { return 
                            iter::if_then_(lit.lim_pos_inf(), iter::vals<VT>(t.distXplus(), t.distXplus() + epsilon))
-                                 else____(                   iter::vals<VT>(t.distXplus()                         )); };
+                                 else____(                   iter::vals<VT>(t.distXplus()                         ))
+                                 | iter::dbg("ebound_plus")
+                                 ; };
 
                        auto ebound_minus = [&]() { return 
                            iter::if_then_(lit.lim_neg_inf(), iter::vals<VT>(t.distXplus(), -infty))
-                                 else____(                   iter::vals<VT>(t.distXplus()        )); };
+                                 else____(                   iter::vals<VT>(t.distXplus()        ))
+                                 | iter::dbg("ebound_plus")
+                       ; };
 
                        return iter::if_then_(t.periodic(), iter::concat(ebreak(), eseg()))
                                     else____(              iter::concat(ebreak(), eseg(), ebound_plus(), ebound_minus()));
@@ -1270,7 +1740,9 @@ namespace viras {
     Literal literal(bool b) { return literal(term(0), b ? PredSymbol::Eq : PredSymbol::Neq); }
 
     Literal vsubs_aperiodic0(LiraLiteral const& lit, Var x, VirtualTerm vt) {
-      VIRAS_LOG("substituting " << lit << "[ " << x << " // " << vt << " ]")
+      // VIRAS_LOG("substituting " << lit << "[ " << x << " // " << vt << " ]")
+      auto impl = [&]() {
+
       auto& s = lit.term;
       auto symbol = lit.symbol;
       assert(!vt.period);
@@ -1309,6 +1781,10 @@ namespace viras {
         assert(!vt.epsilon && !vt.infty && !vt.period);
         return literal(subs(s.self, x, *vt.term), symbol);
       }
+      };
+      auto res = impl();
+      VIRAS_LOG("substituting " << lit << "[ " << x << " // " << vt << " ] = " << res)
+      return res;
     }
 
 
@@ -1325,10 +1801,14 @@ namespace viras {
                               /* case 1 */
                               auto A = [&lits]() { return iter::array(lits) | iter::filter([](auto l) { return !l->periodic(); }); };
                               auto P = [&lits]() { return iter::array(lits) | iter::filter([](auto l) { return l->periodic(); }); };
+
+                              assert((P() | iter::count()) > 0); // if there are no periodic literals we cannot have periodic solution terms
                               Numeral lambda = *(P()
                                              | iter::map([&](auto L) { return L->term.per; })
                                              | iter::fold([](auto l, auto r) { return lcm(l, r); }));
-                              auto iGrid = [this, vt](auto... args) { return intersectGrid(Break { *vt.term, *vt.period, }, args...)
+
+                              auto iGrid = [this, vt](auto... args) { 
+                              return intersectGrid(Break { *vt.term, *vt.period, }, args...)
                                                   | iter::map([](auto x) { return VirtualTerm(x); });
                               ; };
                               auto all_lim_top = [A](Infty inf) { return A() | iter::all([inf](auto l) { return l->lim(inf) == true; }); };
@@ -1351,20 +1831,29 @@ namespace viras {
                                       else____(
                                             A()
                                           | iter::filter([&](auto L) { return L->lim(-infty) == false; })
-                                          | iter::flat_map([&](auto L) {
+                                          | iter::flat_map([lambda, iGrid](auto L) {
+                                                DBGE(*L)
+                                                DBGE(L->term.distXminus())
+                                                DBGE(L->term.deltaX())
+                                                DBGE(lambda)
                                                 return iGrid(Bound::Closed, L->term.distXminus(), L->term.deltaX() + lambda, Bound::Closed);
                                             })
-                                          );
-                              return std::move(fin) | iter::map([&](auto t) { return vsubs_aperiodic1(lits, x, t); });
+                                          )
+                                         | iter::dbg("fin");
+                              return std::move(fin) 
+                              | iter::map([this,&lits,x](auto t) { return vsubs_aperiodic1(lits, x, t); });
                             }()))
-                   else____(iter::vals(vsubs_aperiodic1(lits, x, vt)));
+                   else____( ([&]() {
+                         auto out = iter::vals(vsubs_aperiodic1(lits, x, vt));
+                         return out;
+                       }()));
     }
 
     auto quantifier_elimination(Var x, std::vector<LiraLiteral> const& lits)
     {
       return elim_set(x, lits)
         | iter::dedup()
-        | iter::dbg("elim set elem: ")
+        | iter::dbg("elim set: ")
         | iter::flat_map([this,&lits,x](auto t) { return vsubs(lits, x, t); });
     }
 
@@ -1388,13 +1877,3 @@ namespace viras {
 
 
 }
-
-// namespace std {
-//   template<class C>
-//   struct hash<viras::Viras<C>::VirtualTerm> {
-//     size_t operator()(VirtualTerm const& self) {
-//       assert(false);
-//       return 0;
-//     }
-//   }
-// }
