@@ -3,13 +3,30 @@
 
 namespace viras {
 
-#define pretty(...) __VA_ARGS__
-template<class Config>
-struct VirasTest : Viras<Config> {
+  template<class A>
+  std::ostream& operator<<(std::ostream& out, std::vector<A> const& v) {
+    out << "[ ";
+    auto fst = true;
+    for (auto& x : v) {
+      if (fst) {
+        fst = false;
+      } else {
+        out << ", ";
+      }
+      out << x;
+    }
+    return out << " ]";
+  }
+
+
   // TODO use this instead of outputToString
   // template<class... As>
   // std::string output_to_string(As const&... as) 
   // { std::string_stream;  }
+
+#define pretty(...) __VA_ARGS__
+template<class Config>
+struct VirasTest : Viras<Config> {
 
   template<class... As>
   VirasTest(As... as) : Viras<Config>(as...) {}
@@ -81,7 +98,13 @@ struct VirasTest : Viras<Config> {
       //       | iter::collect_vec;
       auto error = expected.check(result);
       if (error) {
-        std::cout << "[ ERROR ] " << *error << std::endl;
+        std::cout << "[     FAIL ] " << conj << std::endl;
+        std::cout << "[   result ] " << result << std::endl;
+        std::cout << "[    error ] " << *error << std::endl;
+        std::cout << "[ expected ] " <<    expected << std::endl;
+      } else {
+        std::cout << "[     OK   ] " << conj << std::endl;
+
       }
       assert(!error);
       // if (error) {
@@ -149,7 +172,8 @@ overloaded(Ts...) -> overloaded<Ts...>;
   std::vector<std::pair<std::string, Test>> tests() {
     std::vector<std::pair<std::string, Test>> tests;
 
-    auto x = term(this->test_var("x"));
+    auto x_var = this->test_var("x");
+    auto x = term(x_var);
     auto a = term(this->test_var("a"));
     auto b = term(this->test_var("b"));
     auto c = term(this->test_var("c"));
@@ -162,12 +186,16 @@ overloaded(Ts...) -> overloaded<Ts...>;
     // };
 
 
-#define DEF_TEST(name, ...) \
-    tests.push_back(std::make_pair(#name, __VA_ARGS__));
+#define DEF_TEST(name, ...)                                                               \
+    {                                                                                     \
+      auto test = __VA_ARGS__;                                                            \
+      test.x = x_var;                                                                     \
+      tests.push_back(std::make_pair(#name, std::move(test)));                            \
+    }                                                                                     \
 
 #define TEST_EQ(lhs, rhs)                                                                 \
-  [&](auto input, LiraTerm& result) {                                              \
-    ASS(lhs == rhs) \
+  [&](auto input, LiraTerm& result) {                                                     \
+    ASS(lhs == rhs)                                                                       \
   }
 
   //   if (lhs != rhs) {                                             

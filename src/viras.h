@@ -623,6 +623,8 @@ namespace viras {
       ); 
     }
 
+    Var test_var(const char* name) { return config.test_var(name); }
+
     std::optional<Numeral> tryNumeral(Term t) { 
       return matchTerm(t, 
         /* var v */ [&](auto y) { return std::optional<Numeral>(); }, 
@@ -1057,7 +1059,7 @@ namespace viras {
 //     FLIPPED_LITERAL_CONSTRUCTION_OPERATOR(operator< , operator>)
 //     FLIPPED_LITERAL_CONSTRUCTION_OPERATOR(operator<=, operator>=)
 //
-//
+
     // END OF SYNTAX SUGAR STUFF
 
 
