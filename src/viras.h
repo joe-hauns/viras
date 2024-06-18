@@ -78,6 +78,14 @@ namespace viras {
       });
     };
 
+
+    constexpr auto collect_vec = 
+      iterCombinator([](auto iter) {
+        std::vector<value_type<decltype(iter)>> out;
+        std::move(iter) | foreach([&](auto x) { out.push_back(std::move(x)); });
+        return out;
+      });
+
     template<class C = size_t>
     auto count() {
       return iterCombinator([](auto iter) {
@@ -173,7 +181,7 @@ namespace viras {
     };
 
 
-    auto dedup() {
+    inline auto dedup() {
       return iterCombinator([](auto iter) {
             return std::move(iter)
               | filter([set = std::set<
@@ -565,6 +573,10 @@ namespace viras {
         );
     } // TODO
 
+
+    
+    // typename Viras<Config>::VirtualTerm simpl(typename Viras<Config>::VirtualTerm self);
+
     Term term(Numeral n) { return config.term(n); }
     Term term(Var v) { return config.term(v); }
 
@@ -786,11 +798,15 @@ namespace viras {
   auto simplifyingConfig(Config c)
   { return SimplifyingConfig<Config>(std::move(c)); }
 
+
   template<class Config
     , bool optimizeBounds = true
     , bool optimizeGridIntersection = false
     >
   class Viras {
+
+    template<class Conf>
+    friend class VirasTest;
 
   // START OF SYNTAX SUGAR STUFF
 
@@ -1131,6 +1147,8 @@ namespace viras {
     Term    term(Numeral n) { return CTerm    { &_config, _config.term(n.inner) }; }
     Term    term(Var v)     { return CTerm    { &_config, _config.term(v.inner) }; }
     Term    term(int i)     { return term(numeral(i)); }
+    // TODO guard with macro
+    Var test_var(const char* name) { return CVar { &_config, _config.test_var(name) }; }
 
     enum class Bound {
       Open,
@@ -1374,25 +1392,25 @@ namespace viras {
         );
     }
 
-    LiraTerm analyse2(Term self, Var x) {
+    LiraTerm analyse(Term self, Var x) {
       LiraTerm rec0;
       LiraTerm rec1;
       matchTerm(self, 
         /* var v */ [&](auto y) { return std::make_tuple(); }, 
         /* numeral 1 */ [&]() { return std::make_tuple(); }, 
         /* k * t */ [&](auto k, auto t) { 
-          rec0 = analyse2(t, x);
+          rec0 = analyse(t, x);
           return std::make_tuple();
         }, 
 
         /* l + r */ [&](auto l, auto r) { 
-          rec0 = analyse2(l, x);
-          rec1 = analyse2(r, x);
+          rec0 = analyse(l, x);
+          rec1 = analyse(r, x);
           return std::make_tuple();
         }, 
 
         /* floor */ [&](auto t) { 
-          rec0 = analyse2(t, x);
+          rec0 = analyse(t, x);
           return std::make_tuple();
         });
       auto matchRec = [&](auto if_var, auto if_one, auto if_mul, auto if_add, auto if_floor) {
@@ -1415,7 +1433,7 @@ namespace viras {
       res.breaks = calcBreaks(res, x, matchRec);
       
 #define DEBUG_FIELD(field) \
-        DBG("analyse2(", res.self, ")." #field " = ", res.field)
+        DBG("analyse(", res.self, ")." #field " = ", res.field)
         // DEBUG_FIELD(breaks.size())
         // iter::array(res.breaks) | iter::dbg("break") | iter::foreach([](auto...){});
         // DBG("")
@@ -1430,137 +1448,137 @@ namespace viras {
         return res;
     }
 
-    LiraTerm analyse(Term self, Var x) {
-      auto res = matchTerm(self,
-        /* var v */ [&](auto y) { 
-        return LiraTerm {
-          .self = self,
-          .x = x,
-          .lim = self,
-          .sslp = numeral(y == x ? 1 : 0),
-          .oslp = numeral(y == x ? 1 : 0),
-          .per = numeral(0),
-          .deltaY = numeral(0),
-          .distYminus = y == x ? term(0) 
-                               : term(y),
-          .breaks = std::vector<Break>(),
-        }; }, 
-
-        /* numeral 1 */ [&]() { return LiraTerm {
-          .self = self,
-          .x = x,
-          .lim = self,
-          .sslp = numeral(0),
-          .oslp = numeral(0),
-          .per = numeral(0),
-          .deltaY = numeral(0),
-          .distYminus = term(numeral(1)),
-          .breaks = std::vector<Break>(),
-        }; }, 
-        /* k * t */ [&](auto k, auto t) { 
-          auto rec = analyse(t, x);
-          return LiraTerm {
-            .self = self,
-            .x = x,
-            .lim = rec.per == 0 ? self : k * rec.lim,
-            .sslp = k * rec.sslp,
-            .oslp = k * rec.oslp,
-            .per = rec.per,
-            .deltaY = abs(k) * rec.deltaY,
-            .distYminus = k >= 0 ? k * rec.distYminus
-                                 : k * rec.distYplus(),
-            .breaks = std::move(rec.breaks),
-          }; 
-        }, 
-
-        /* l + r */ [&](auto l, auto r) { 
-          auto rec_l = analyse(l, x);
-          auto rec_r = analyse(r, x);
-          auto per = rec_l.per == 0 ? rec_r.per
-                 : rec_r.per == 0 ? rec_l.per
-                 : lcm(rec_l.per, rec_r.per);
-          auto breaks = std::move(rec_l.breaks);
-          breaks.insert(breaks.end(), rec_r.breaks.begin(), rec_r.breaks.end());
-          return LiraTerm {
-            .self = self,
-            .x = x,
-            .lim = per == 0 ? self : rec_l.lim + rec_r.lim,
-            .sslp = rec_l.sslp + rec_r.sslp,
-            .oslp = rec_l.oslp + rec_r.oslp,
-            .per = per,
-            .deltaY = rec_l.deltaY + rec_r.deltaY,
-            .distYminus = rec_l.distYminus + rec_r.distYminus,
-            .breaks = std::move(breaks),
-          }; 
-        }, 
-
-        /* floor t */ [&](auto t) { 
-          auto rec = analyse(t, x);
-          auto per = rec.per == 0 && rec.oslp == 0 ? numeral(0)
-                   : rec.per == 0                  ? 1 / abs(rec.oslp)
-                   : num(rec.per) * den(rec.oslp);
-          
-          auto out = LiraTerm {
-            .self = self,
-            .x = x,
-            .lim = per == 0      ? self 
-                 : rec.sslp >= 0 ? floor(rec.lim) 
-                                 : ceil(rec.lim) - 1,
-            .sslp = numeral(0),
-            .oslp = rec.oslp,
-            .per = per,
-            .deltaY = optimizeBounds 
-              ? (rec.per == 0 ? numeral(0) : rec.deltaY + 1)
-              :                              rec.deltaY + 1 ,
-            .distYminus = optimizeBounds 
-              ? (rec.per == 0 ? rec.distYminus : rec.distYminus - 1)
-              :                                  rec.distYminus - 1 ,
-            .breaks = std::vector<Break>(),
-          }; 
-          if (rec.sslp == 0) {
-            out.breaks = std::move(rec.breaks);
-          } else if (rec.breaks.empty()) {
-            out.breaks.push_back(Break {rec.zero(term(0)), out.per});
-          } else {
-            auto p_min = *(iter::array(out.breaks) 
-              | iter::map([](auto b) -> Numeral { return b->p; })
-              | iter::min);
-            for ( auto b0p_pZ : rec.breaks ) {
-              auto b0p = b0p_pZ.t;
-              auto p   = b0p_pZ.p;
-              intersectGrid(b0p_pZ, 
-                            Bound::Closed, b0p, out.per, Bound::Open) 
-                | iter::foreach([&](auto b0) {
-                    intersectGrid(Break{rec.zero(b0), 1/rec.sslp}, 
-                                  Bound::Closed, b0, p_min, Bound::Open)
-                      | iter::foreach([&](auto b) {
-                          out.breaks.push_back(Break{b, out.per });
-                      });
-                });
-            }
-            out.breaks.insert(out.breaks.end(), rec.breaks.begin(), rec.breaks.end());
-          }
-          return out;
-        }
-        );
-#define DEBUG_FIELD(field) \
-        DBG("analyse(", res.self, ")." #field " = ", res.field)
-        // DEBUG_FIELD(breaks.size())
-        // iter::array(res.breaks) | iter::dbg("break") | iter::foreach([](auto...){});
-        // DBG("")
-        // DEBUG_FIELD(per)
-        // DEBUG_FIELD(deltaY)
-        // DBG("")
-
-        if (optimizeBounds) {
-          assert(res.per != 0 || res.deltaY == 0);
-        }
-        assert((res.per == 0) == (res.breaks.size() == 0));
-        return res;
-    };
+//     LiraTerm analyse(Term self, Var x) {
+//       auto res = matchTerm(self,
+//         /* var v */ [&](auto y) { 
+//         return LiraTerm {
+//           .self = self,
+//           .x = x,
+//           .lim = self,
+//           .sslp = numeral(y == x ? 1 : 0),
+//           .oslp = numeral(y == x ? 1 : 0),
+//           .per = numeral(0),
+//           .deltaY = numeral(0),
+//           .distYminus = y == x ? term(0) 
+//                                : term(y),
+//           .breaks = std::vector<Break>(),
+//         }; }, 
+//
+//         /* numeral 1 */ [&]() { return LiraTerm {
+//           .self = self,
+//           .x = x,
+//           .lim = self,
+//           .sslp = numeral(0),
+//           .oslp = numeral(0),
+//           .per = numeral(0),
+//           .deltaY = numeral(0),
+//           .distYminus = term(numeral(1)),
+//           .breaks = std::vector<Break>(),
+//         }; }, 
+//         /* k * t */ [&](auto k, auto t) { 
+//           auto rec = analyse(t, x);
+//           return LiraTerm {
+//             .self = self,
+//             .x = x,
+//             .lim = rec.per == 0 ? self : k * rec.lim,
+//             .sslp = k * rec.sslp,
+//             .oslp = k * rec.oslp,
+//             .per = rec.per,
+//             .deltaY = abs(k) * rec.deltaY,
+//             .distYminus = k >= 0 ? k * rec.distYminus
+//                                  : k * rec.distYplus(),
+//             .breaks = std::move(rec.breaks),
+//           }; 
+//         }, 
+//
+//         /* l + r */ [&](auto l, auto r) { 
+//           auto rec_l = analyse(l, x);
+//           auto rec_r = analyse(r, x);
+//           auto per = rec_l.per == 0 ? rec_r.per
+//                  : rec_r.per == 0 ? rec_l.per
+//                  : lcm(rec_l.per, rec_r.per);
+//           auto breaks = std::move(rec_l.breaks);
+//           breaks.insert(breaks.end(), rec_r.breaks.begin(), rec_r.breaks.end());
+//           return LiraTerm {
+//             .self = self,
+//             .x = x,
+//             .lim = per == 0 ? self : rec_l.lim + rec_r.lim,
+//             .sslp = rec_l.sslp + rec_r.sslp,
+//             .oslp = rec_l.oslp + rec_r.oslp,
+//             .per = per,
+//             .deltaY = rec_l.deltaY + rec_r.deltaY,
+//             .distYminus = rec_l.distYminus + rec_r.distYminus,
+//             .breaks = std::move(breaks),
+//           }; 
+//         }, 
+//
+//         /* floor t */ [&](auto t) { 
+//           auto rec = analyse(t, x);
+//           auto per = rec.per == 0 && rec.oslp == 0 ? numeral(0)
+//                    : rec.per == 0                  ? 1 / abs(rec.oslp)
+//                    : num(rec.per) * den(rec.oslp);
+//           
+//           auto out = LiraTerm {
+//             .self = self,
+//             .x = x,
+//             .lim = per == 0      ? self 
+//                  : rec.sslp >= 0 ? floor(rec.lim) 
+//                                  : ceil(rec.lim) - 1,
+//             .sslp = numeral(0),
+//             .oslp = rec.oslp,
+//             .per = per,
+//             .deltaY = optimizeBounds 
+//               ? (rec.per == 0 ? numeral(0) : rec.deltaY + 1)
+//               :                              rec.deltaY + 1 ,
+//             .distYminus = optimizeBounds 
+//               ? (rec.per == 0 ? rec.distYminus : rec.distYminus - 1)
+//               :                                  rec.distYminus - 1 ,
+//             .breaks = std::vector<Break>(),
+//           }; 
+//           if (rec.sslp == 0) {
+//             out.breaks = std::move(rec.breaks);
+//           } else if (rec.breaks.empty()) {
+//             out.breaks.push_back(Break {rec.zero(term(0)), out.per});
+//           } else {
+//             auto p_min = *(iter::array(out.breaks) 
+//               | iter::map([](auto b) -> Numeral { return b->p; })
+//               | iter::min);
+//             for ( auto b0p_pZ : rec.breaks ) {
+//               auto b0p = b0p_pZ.t;
+//               auto p   = b0p_pZ.p;
+//               intersectGrid(b0p_pZ, 
+//                             Bound::Closed, b0p, out.per, Bound::Open) 
+//                 | iter::foreach([&](auto b0) {
+//                     intersectGrid(Break{rec.zero(b0), 1/rec.sslp}, 
+//                                   Bound::Closed, b0, p_min, Bound::Open)
+//                       | iter::foreach([&](auto b) {
+//                           out.breaks.push_back(Break{b, out.per });
+//                       });
+//                 });
+//             }
+//             out.breaks.insert(out.breaks.end(), rec.breaks.begin(), rec.breaks.end());
+//           }
+//           return out;
+//         }
+//         );
+// #define DEBUG_FIELD(field) \
+//         DBG("analyse(", res.self, ")." #field " = ", res.field)
+//         // DEBUG_FIELD(breaks.size())
+//         // iter::array(res.breaks) | iter::dbg("break") | iter::foreach([](auto...){});
+//         // DBG("")
+//         // DEBUG_FIELD(per)
+//         // DEBUG_FIELD(deltaY)
+//         // DBG("")
+//
+//         if (optimizeBounds) {
+//           assert(res.per != 0 || res.deltaY == 0);
+//         }
+//         assert((res.per == 0) == (res.breaks.size() == 0));
+//         return res;
+//     };
 
     LiraLiteral analyse(Literal self, Var x) 
-    { return LiraLiteral { analyse2(self.term(), x), self.symbol() }; }
+    { return LiraLiteral { analyse(self.term(), x), self.symbol() }; }
 
     std::vector<LiraLiteral> analyse(Literals const& self, Var x) 
     { 
@@ -1870,6 +1888,7 @@ namespace viras {
       return quantifier_elimination(CVar { &_config, x }, lits)
         | iter::map([&](auto lits) { return std::move(lits) | iter::map([](auto lit) { return lit.inner; }); });
     }
+
   };
 
   template<class Config>
