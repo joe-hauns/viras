@@ -1,22 +1,29 @@
+#pragma once
+
 #include <optional>
 #include <iostream>
 #include <set>
 #include <map>
-#include <cassert>
 #include <tuple>
 
-#pragma once
+#ifndef VIRAS_ASSERT
+#include <cassert>
+#define VIRAS_ASSERT(...) assert(__VA_ARGS__);
+#endif // VIRAS_ASSERT
 
 #define VIRAS_LOG(...) std::cout << __VA_ARGS__ << std::endl;
 
-#define DERIVE_TUPLE(Self,...) \
-      auto asTuple() const { return std::tie(__VA_ARGS__); } \
-      \
-      friend bool operator==(Self const& lhs, Self const& rhs)  \
-      { return lhs.asTuple() == rhs.asTuple(); } \
-      \
-      friend bool operator<(Self const& lhs, Self const& rhs)  \
-      { return lhs.asTuple() < rhs.asTuple(); } \
+#define DERIVE_TUPLE(Slf,...)                                                             \
+      using Self = Slf;                                                                   \
+      auto asTuple() const { return std::tie(__VA_ARGS__); }                              \
+
+#define DERIVE_TUPLE_EQ                                                                   \
+      friend bool operator==(Self const& lhs, Self const& rhs)                            \
+      { return lhs.asTuple() == rhs.asTuple(); }                                          \
+
+#define DERIVE_TUPLE_LESS                                                                 \
+      friend bool operator<(Self const& lhs, Self const& rhs)                             \
+      { return lhs.asTuple() < rhs.asTuple(); }                                           \
 
 
 namespace viras {
@@ -471,7 +478,7 @@ namespace viras {
 #define if_then_(x, y) if_then([&]() { return x; }, [&]() { return y; }) 
 #define else_if_(x, y) .else_if([&]() { return x; }, [&]() { return y; })
 #define else____(x) .else_([&]() { return x; })
-#define else_is_(x,y) .else_([&]() { assert(x); return y; })
+#define else_is_(x,y) .else_([&]() { VIRAS_ASSERT(x); return y; })
 
 
     template<class I, class... Is>
@@ -735,8 +742,8 @@ namespace viras {
           auto integral = matchTerm(r, 
             /* var v */     [&](auto...) {                return false; }, 
             /* numeral 1 */ [&](auto...) {                return true;  }, 
-            /* k * t */     [&](auto...) { assert(false); return false; }, 
-            /* l + r */     [&](auto...) { assert(false); return false; }, 
+            /* k * t */     [&](auto...) { VIRAS_ASSERT(false); return false; }, 
+            /* l + r */     [&](auto...) { VIRAS_ASSERT(false); return false; }, 
             /* floor */     [&](auto...) {                return true;  });
           if (integral) {
             update(outer, r, [&](auto i)  { return i +      config.floor(l) ; });
@@ -819,6 +826,8 @@ namespace viras {
       friend std::ostream& operator<<(std::ostream& out, WithConfig const& self)
       { return out << outputPtr(self.inner); }
       DERIVE_TUPLE(WithConfig, inner)
+      DERIVE_TUPLE_EQ
+      DERIVE_TUPLE_LESS
     };
 
     struct CTerm : public WithConfig<typename Config::Term> { };
@@ -844,19 +853,19 @@ namespace viras {
 
     friend CTerm operator+(CTerm lhs, CTerm rhs) 
     {
-      assert(lhs.config == rhs.config);
+      VIRAS_ASSERT(lhs.config == rhs.config);
       return CTerm {lhs.config, lhs.config->add(lhs.inner, rhs.inner)};
     }
 
     friend CTerm operator*(CNumeral lhs, CTerm rhs) 
     {
-      assert(lhs.config == rhs.config);
+      VIRAS_ASSERT(lhs.config == rhs.config);
       return CTerm {lhs.config, lhs.config->mul(lhs.inner, rhs.inner)};
     }
 
     friend CNumeral operator*(CNumeral lhs, CNumeral rhs) 
     {
-      assert(lhs.config == rhs.config);
+      VIRAS_ASSERT(lhs.config == rhs.config);
       return CNumeral {lhs.config, lhs.config->mul(lhs.inner, rhs.inner)};
     }
 
@@ -872,14 +881,6 @@ namespace viras {
 
     friend CTerm operator+(CTerm lhs, CNumeral rhs) 
     { return lhs + CTerm { rhs.config, rhs.config->term(rhs.inner), }; }
-
-#define LIFT_NUMRAL_TO_TERM_L(function)                                                   \
-    friend auto function(CNumeral lhs, CTerm rhs)                                         \
-    { return function(CTerm {lhs.config, lhs.config->term(lhs)}, rhs); }                  \
-
-#define LIFT_NUMRAL_TO_TERM_R(function)                                                   \
-    friend auto function(CTerm lhs, CNumeral rhs)                                         \
-    { return function(lhs, CTerm {rhs.config, rhs.config->term(rhs)}); }                  \
 
 #define LIFT_INT_TO_NUMERAL(function, CType)                                              \
     LIFT_INT_TO_NUMERAL_L(function, CType)                                                \
@@ -1012,14 +1013,55 @@ namespace viras {
     }
 
 
-    // friend CTerm subs(CTerm t, CVar v, CTerm by) {
-    //   return Term { t.config, t.config->subs(t.inner, v.inner, by.inner), };
-    // }
+    static CTerm to_term(CNumeral n) 
+    { return Term { n.config, n.config->term(n.inner), }; }
 
-    
+    static CNumeral to_numeral(Config* c, int n) 
+    { return Numeral { c, c->numeral(n), }; }
+
+#define LIFT_NUMERAL_TO_TERM_L(fn)                                                        \
+    friend auto fn(CNumeral const& lhs, CTerm const& rhs)                                 \
+    { return fn(to_term(lhs), rhs); }
+
+#define LIFT_NUMERAL_TO_TERM_R(fn)                                                        \
+    friend auto fn(CTerm const& lhs, CNumeral const& rhs)                                 \
+    { return fn(lhs, to_term(rhs)); }
+
+#define LIFT_NUMERAL_TO_TERM(fn)                                                          \
+    LIFT_NUMERAL_TO_TERM_L(fn)                                                            \
+    LIFT_NUMERAL_TO_TERM_R(fn)                                                            \
+
+
+#define LITERAL_CONSTRUCTION_OPERATOR(fn, Sym)                                            \
+    friend CLiteral fn(CTerm lhs, CTerm rhs)                                              \
+    {                                                                                     \
+      VIRAS_ASSERT(lhs.config == rhs.config);                                             \
+      return CLiteral { lhs.config, lhs.config->create_literal((lhs - rhs).inner, Sym) }; \
+    }                                                                                     \
+                                                                                          \
+    LIFT_NUMERAL_TO_TERM(fn)                                                              \
+    LIFT_INT_TO_NUMERAL(fn, CTerm)                                                        \
+
+    LITERAL_CONSTRUCTION_OPERATOR(operator> , PredSymbol::Gt);
+    LITERAL_CONSTRUCTION_OPERATOR(operator>=, PredSymbol::Geq);
+    LITERAL_CONSTRUCTION_OPERATOR(eq, PredSymbol::Neq);
+    LITERAL_CONSTRUCTION_OPERATOR(neq, PredSymbol::Eq);
+//
+// #define FLIPPED_LITERAL_CONSTRUCTION_OPERATOR(fn, flipped)                                \
+//     friend CLiteral fn(CTerm lhs, CTerm rhs)                                              \
+//     { return flipped(rhs, lhs); }                                                         \
+//                                                                                           \
+//     LIFT_NUMERAL_TO_TERM(fn)                                                              \
+//     LIFT_INT_TO_NUMERAL(fn, CTerm)                                                        \
+//    
+//     FLIPPED_LITERAL_CONSTRUCTION_OPERATOR(operator< , operator>)
+//     FLIPPED_LITERAL_CONSTRUCTION_OPERATOR(operator<=, operator>=)
+//
+//
     // END OF SYNTAX SUGAR STUFF
 
 
+    // TODO get rid of this
     using Term     = CTerm;
     using Numeral  = CNumeral;
     using Var      = CVar;
@@ -1038,6 +1080,8 @@ namespace viras {
       Numeral p;
       friend std::ostream& operator<<(std::ostream& out, Break const& self)
       { return out << self.t << " + " << self.p << "ℤ"; }
+      DERIVE_TUPLE(Break,t,p)
+      DERIVE_TUPLE_EQ
     };
 
     template<class L, class R> struct Add { L l; R r; };
@@ -1096,8 +1140,27 @@ namespace viras {
         }
       }
       DERIVE_TUPLE(Infty, positive)
+      DERIVE_TUPLE_EQ
+      DERIVE_TUPLE_LESS
     };
     static constexpr Infty infty { .positive = true, };
+
+
+    struct ZComp {
+      Numeral period;
+
+      ZComp(Numeral period) : period(period) {}
+
+      friend std::ostream& operator<<(std::ostream& out, ZComp const& self)
+      { return out << self.period << "ℤ"; }
+      DERIVE_TUPLE(ZComp, period)
+      DERIVE_TUPLE_EQ
+      DERIVE_TUPLE_LESS
+    };
+
+    ZComp Z(Numeral n) { return ZComp(n); }
+    ZComp Z(int n) { return ZComp(numeral(n)); }
+    ZComp Z(int n, int m) { return ZComp(numeral(n) / m); }
 
     struct LiraLiteral {
       LiraTerm term;
@@ -1109,7 +1172,7 @@ namespace viras {
 
       bool lim_inf(bool positive) const
       { 
-        assert(term.oslp != 0);
+        VIRAS_ASSERT(term.oslp != 0);
         switch (symbol) {
         case PredSymbol::Gt:
         case PredSymbol::Geq: return positive ? term.oslp > 0 
@@ -1165,7 +1228,7 @@ namespace viras {
       }();
       DBGE(t)
       DBGE(start)
-      assert(k != 0 || (l == Bound::Closed && r == Bound::Closed));
+      VIRAS_ASSERT(k != 0 || (l == Bound::Closed && r == Bound::Closed));
       return iter::if_then_(optimizeGridIntersection && k == 0, iter::vals(start))
                    else____(iter::nat_iter(numeral(0))
                               | iter::take_while([r,p,k](auto n) -> bool { 
@@ -1310,7 +1373,7 @@ namespace viras {
         { return rec_l.deltaY + rec_r.deltaY; }
 
         /* floor t */ , [&](auto t, auto& rec)  {
-          assert(self.per != 0 || rec.per == 0);
+          VIRAS_ASSERT(self.per != 0 || rec.per == 0);
           return optimizeBounds 
                ? (self.per == 0 ? numeral(0) : rec.deltaY + 1)
                :                               rec.deltaY + 1 ; 
@@ -1336,7 +1399,7 @@ namespace viras {
 
         /* floor t */ , [&](auto t, auto& rec) 
         { 
-          assert(self.per != 0 || rec.per == 0);
+          VIRAS_ASSERT(self.per != 0 || rec.per == 0);
           return optimizeBounds 
                ? (self.per == 0 ? floor(rec.distYminus) :  rec.distYminus - 1)
                :                                            rec.distYminus - 1 ; }
@@ -1432,7 +1495,7 @@ namespace viras {
       res.distYminus = calcDistYminus(res, x, matchRec);
       res.breaks = calcBreaks(res, x, matchRec);
       
-#define DEBUG_FIELD(field) \
+#define DEBUG_FIELD(field)                                                                \
         DBG("analyse(", res.self, ")." #field " = ", res.field)
         // DEBUG_FIELD(breaks.size())
         // iter::array(res.breaks) | iter::dbg("break") | iter::foreach([](auto...){});
@@ -1442,9 +1505,9 @@ namespace viras {
         // DBG("")
 
         if (optimizeBounds) {
-          assert(res.per != 0 || res.deltaY == 0);
+          VIRAS_ASSERT(res.per != 0 || res.deltaY == 0);
         }
-        assert((res.per == 0) == (res.breaks.size() == 0));
+        VIRAS_ASSERT((res.per == 0) == (res.breaks.size() == 0));
         return res;
     }
 
@@ -1561,7 +1624,7 @@ namespace viras {
 //           return out;
 //         }
 //         );
-// #define DEBUG_FIELD(field) \
+// #define DEBUG_FIELD(field)                                                             \
 //         DBG("analyse(", res.self, ")." #field " = ", res.field)
 //         // DEBUG_FIELD(breaks.size())
 //         // iter::array(res.breaks) | iter::dbg("break") | iter::foreach([](auto...){});
@@ -1571,9 +1634,9 @@ namespace viras {
 //         // DBG("")
 //
 //         if (optimizeBounds) {
-//           assert(res.per != 0 || res.deltaY == 0);
+//           VIRAS_ASSERT(res.per != 0 || res.deltaY == 0);
 //         }
-//         assert((res.per == 0) == (res.breaks.size() == 0));
+//         VIRAS_ASSERT((res.per == 0) == (res.breaks.size() == 0));
 //         return res;
 //     };
 
@@ -1597,6 +1660,8 @@ namespace viras {
       friend std::ostream& operator<<(std::ostream& out, Epsilon const& self)
       { return out << "ε"; }
       DERIVE_TUPLE(Epsilon,)
+      DERIVE_TUPLE_EQ
+      DERIVE_TUPLE_LESS
     };
     static constexpr Epsilon epsilon;
 
@@ -1616,10 +1681,11 @@ namespace viras {
         , period(std::move(period))
         , infty(std::move(infinity))
       {
-        assert(term || infinity);
-        assert(!infty || !period);
+        VIRAS_ASSERT(term || infinity);
+        VIRAS_ASSERT(!infty || !period);
       }
 
+      VirtualTerm(Numeral n) : VirtualTerm(to_term(n)) {}
       VirtualTerm(Break t_pZ) : VirtualTerm(std::move(t_pZ.t), {}, std::move(t_pZ.p), {}) {}
       VirtualTerm(Infty infty) : VirtualTerm({}, {}, {}, infty) {}
       VirtualTerm(Term t) : VirtualTerm(std::move(t), {}, {}, {}) {}
@@ -1631,7 +1697,7 @@ namespace viras {
       friend std::ostream& operator<<(std::ostream& out, VirtualTerm const& self)
       { 
         bool fst = true;
-#define __OUTPUT(field)                                                                     \
+#define __OUTPUT(field)                                                                   \
         if (fst) { out << field; fst = false; }                                           \
         else { out << " + " << field; }                                                   \
 
@@ -1645,6 +1711,8 @@ namespace viras {
       }
 
       DERIVE_TUPLE(VirtualTerm, term, epsilon, period, infty)
+      DERIVE_TUPLE_EQ
+      DERIVE_TUPLE_LESS
     };
 
 
@@ -1660,16 +1728,38 @@ namespace viras {
       return out; 
     }
 
-    friend VirtualTerm operator+(Term const& t, Infty const& infty) 
-    { return VirtualTerm(t) + infty; }
+    friend VirtualTerm operator+(Numeral const& t, Epsilon const) 
+    { return to_term(t) + epsilon; }
 
-    friend VirtualTerm operator+(VirtualTerm const& t, Infty const& infty) 
+
+    friend VirtualTerm operator+(Term const& t, ZComp const& z) 
+    { return VirtualTerm(t) + z; }
+
+    friend VirtualTerm operator+(Numeral const& t, ZComp const& z) 
+    { return to_term(t) + z; }
+
+    friend VirtualTerm operator+(int t, ZComp const& z) 
+    { return to_numeral(z.period.config, t) + z; }
+
+    friend VirtualTerm operator+(VirtualTerm const& t, ZComp const& z) 
     { 
       VirtualTerm out = t;
-      out.infty = std::optional<Infty>(infty);
+      out.period = std::optional<Numeral>(z.period);
       return out; 
     }
 
+    friend VirtualTerm operator+(Term const& t, Infty const& i) 
+    { return VirtualTerm(t) + i; }
+
+    friend VirtualTerm operator+(VirtualTerm const& t, Infty const& i) 
+    { 
+      VirtualTerm out = t;
+      out.infty = std::optional<Infty>(i);
+      return out; 
+    }
+
+    friend VirtualTerm operator+(Numeral const& t, Infty const& i) 
+    { return to_term(t) + i; }
 
     auto elim_set(Var x, LiraLiteral const& lit)
     {
@@ -1763,7 +1853,7 @@ namespace viras {
 
       auto& s = lit.term;
       auto symbol = lit.symbol;
-      assert(!vt.period);
+      VIRAS_ASSERT(!vt.period);
       if (vt.infty) {
         /* case 3 */
         if (s.periodic()) {
@@ -1796,7 +1886,7 @@ namespace viras {
           }
         }
       } else {
-        assert(!vt.epsilon && !vt.infty && !vt.period);
+        VIRAS_ASSERT(!vt.epsilon && !vt.infty && !vt.period);
         return literal(subs(s.self, x, *vt.term), symbol);
       }
       };
@@ -1808,7 +1898,7 @@ namespace viras {
 
     auto vsubs_aperiodic1(std::vector<LiraLiteral> const& lits, Var x, VirtualTerm term) {
       // VIRAS_LOG((lits) << "[ " << x << " // " << vt << " ]")
-      assert(!term.period);
+      VIRAS_ASSERT(!term.period);
           /* case 2 */
       return iter::array(lits) 
         | iter::map([this, x, term](auto lit) { return vsubs_aperiodic0(*lit, x, term); });
@@ -1820,7 +1910,7 @@ namespace viras {
                               auto A = [&lits]() { return iter::array(lits) | iter::filter([](auto l) { return !l->periodic(); }); };
                               auto P = [&lits]() { return iter::array(lits) | iter::filter([](auto l) { return l->periodic(); }); };
 
-                              assert((P() | iter::count()) > 0); // if there are no periodic literals we cannot have periodic solution terms
+                              VIRAS_ASSERT((P() | iter::count()) > 0); // if there are no periodic literals we cannot have periodic solution terms
                               Numeral lambda = *(P()
                                              | iter::map([&](auto L) { return L->term.per; })
                                              | iter::fold([](auto l, auto r) { return lcm(l, r); }));
