@@ -832,23 +832,23 @@ namespace viras {
       DERIVE_TUPLE_LESS
     };
 
-    struct CTerm : public WithConfig<typename Config::Term> { };
-    struct CNumeral : public WithConfig<typename Config::Numeral> {};
-    struct CVar : public WithConfig<typename Config::Var> {};
-    struct CLiteral : public WithConfig<typename Config::Literal> {
-      CTerm term() const
-      { return CTerm {this->config, this->config->term_of_literal(this->inner)}; }
+    struct Term : public WithConfig<typename Config::Term> { };
+    struct Numeral : public WithConfig<typename Config::Numeral> {};
+    struct Var : public WithConfig<typename Config::Var> {};
+    struct Literal : public WithConfig<typename Config::Literal> {
+      Term term() const
+      { return Term {this->config, this->config->term_of_literal(this->inner)}; }
 
       PredSymbol symbol() const
       { return this->config->symbol_of_literal(this->inner); }
 
-      friend std::ostream& operator<<(std::ostream& out, CLiteral const& self)
+      friend std::ostream& operator<<(std::ostream& out, Literal const& self)
       { return out << self.term() << " " << self.symbol() << " 0"; }
     };
-    struct CLiterals : public WithConfig<typename Config::Literals> {
+    struct Literals : public WithConfig<typename Config::Literals> {
       auto size() const { return this->config->literals_size(this->inner); }
       auto operator[](size_t idx) const { 
-        return CLiteral { this->config, this->config->literals_get(this->inner, idx) }; 
+        return Literal { this->config, this->config->literals_get(this->inner, idx) }; 
       }
     };
 
@@ -856,36 +856,36 @@ namespace viras {
     // PRIMARY OPERATORS
     ///////////////////////////////////////
 
-    friend CTerm operator+(CTerm lhs, CTerm rhs) 
+    friend Term operator+(Term lhs, Term rhs) 
     {
       VIRAS_ASSERT(lhs.config == rhs.config);
-      return CTerm {lhs.config, lhs.config->add(lhs.inner, rhs.inner)};
+      return Term {lhs.config, lhs.config->add(lhs.inner, rhs.inner)};
     }
 
-    friend CTerm operator*(CNumeral lhs, CTerm rhs) 
+    friend Term operator*(Numeral lhs, Term rhs) 
     {
       VIRAS_ASSERT(lhs.config == rhs.config);
-      return CTerm {lhs.config, lhs.config->mul(lhs.inner, rhs.inner)};
+      return Term {lhs.config, lhs.config->mul(lhs.inner, rhs.inner)};
     }
 
-    friend CNumeral operator*(CNumeral lhs, CNumeral rhs) 
+    friend Numeral operator*(Numeral lhs, Numeral rhs) 
     {
       VIRAS_ASSERT(lhs.config == rhs.config);
-      return CNumeral {lhs.config, lhs.config->mul(lhs.inner, rhs.inner)};
+      return Numeral {lhs.config, lhs.config->mul(lhs.inner, rhs.inner)};
     }
 
     ///////////////////////////////////////
     // LIFTED OPERATORS
     ///////////////////////////////////////
 
-    friend CNumeral operator+(CNumeral lhs, CNumeral rhs) 
-    { return CNumeral { lhs.config, lhs.config->add(lhs.inner, rhs.inner)}; }
+    friend Numeral operator+(Numeral lhs, Numeral rhs) 
+    { return Numeral { lhs.config, lhs.config->add(lhs.inner, rhs.inner)}; }
 
-    friend CTerm operator+(CNumeral lhs, CTerm rhs) 
-    { return CTerm { rhs.config, lhs.config->term(lhs.inner)} + rhs; }
+    friend Term operator+(Numeral lhs, Term rhs) 
+    { return Term { rhs.config, lhs.config->term(lhs.inner)} + rhs; }
 
-    friend CTerm operator+(CTerm lhs, CNumeral rhs) 
-    { return lhs + CTerm { rhs.config, rhs.config->term(rhs.inner), }; }
+    friend Term operator+(Term lhs, Numeral rhs) 
+    { return lhs + Term { rhs.config, rhs.config->term(rhs.inner), }; }
 
 #define LIFT_INT_TO_NUMERAL(function, CType)                                              \
     LIFT_INT_TO_NUMERAL_L(function, CType)                                                \
@@ -894,43 +894,43 @@ namespace viras {
 
 #define LIFT_INT_TO_NUMERAL_L(function, CType)                                            \
     friend auto function(int lhs, CType rhs)                                              \
-    { return function(CNumeral {rhs.config, rhs.config->numeral(lhs)}, rhs); }            \
+    { return function(Numeral {rhs.config, rhs.config->numeral(lhs)}, rhs); }            \
 
 #define LIFT_INT_TO_NUMERAL_R(function, CType)                                            \
     friend auto function(CType lhs, int rhs)                                              \
-    { return function(lhs, CNumeral {lhs.config, lhs.config->numeral(rhs)}); }            \
+    { return function(lhs, Numeral {lhs.config, lhs.config->numeral(rhs)}); }            \
 
 #define LIFT_INT_TO_NUMERAL(function, CType)                                              \
     LIFT_INT_TO_NUMERAL_L(function, CType)                                                \
     LIFT_INT_TO_NUMERAL_R(function, CType)                                                \
 
-    LIFT_INT_TO_NUMERAL(operator+, CNumeral)
-    LIFT_INT_TO_NUMERAL(operator-, CNumeral)
-    LIFT_INT_TO_NUMERAL(operator*, CNumeral)
+    LIFT_INT_TO_NUMERAL(operator+, Numeral)
+    LIFT_INT_TO_NUMERAL(operator-, Numeral)
+    LIFT_INT_TO_NUMERAL(operator*, Numeral)
 
-    LIFT_INT_TO_NUMERAL(operator==, CNumeral)
-    LIFT_INT_TO_NUMERAL(operator!=, CNumeral)
-    LIFT_INT_TO_NUMERAL(operator<=, CNumeral)
-    LIFT_INT_TO_NUMERAL(operator>=, CNumeral)
-    LIFT_INT_TO_NUMERAL(operator< , CNumeral)
-    LIFT_INT_TO_NUMERAL(operator> , CNumeral)
+    LIFT_INT_TO_NUMERAL(operator==, Numeral)
+    LIFT_INT_TO_NUMERAL(operator!=, Numeral)
+    LIFT_INT_TO_NUMERAL(operator<=, Numeral)
+    LIFT_INT_TO_NUMERAL(operator>=, Numeral)
+    LIFT_INT_TO_NUMERAL(operator< , Numeral)
+    LIFT_INT_TO_NUMERAL(operator> , Numeral)
 
-    LIFT_INT_TO_NUMERAL(operator+, CTerm)
-    LIFT_INT_TO_NUMERAL(operator-, CTerm)
-    LIFT_INT_TO_NUMERAL_L(operator*, CTerm)
+    LIFT_INT_TO_NUMERAL(operator+, Term)
+    LIFT_INT_TO_NUMERAL(operator-, Term)
+    LIFT_INT_TO_NUMERAL_L(operator*, Term)
 
 
      // MULTIPLICATION
      // DIVISION
 
-    friend CTerm operator/(CTerm lhs, CNumeral rhs) 
+    friend Term operator/(Term lhs, Numeral rhs) 
     { return (1 / rhs) * lhs; }
 
-    friend CNumeral operator/(CNumeral lhs, CNumeral rhs) 
-    { return CNumeral{ rhs.config, rhs.config->inverse(rhs.inner) } * lhs; }
+    friend Numeral operator/(Numeral lhs, Numeral rhs) 
+    { return Numeral{ rhs.config, rhs.config->inverse(rhs.inner) } * lhs; }
 
-    LIFT_INT_TO_NUMERAL_R(operator/, CTerm)
-    LIFT_INT_TO_NUMERAL(operator/, CNumeral)
+    LIFT_INT_TO_NUMERAL_R(operator/, Term)
+    LIFT_INT_TO_NUMERAL(operator/, Numeral)
 
      // MINUS
 
@@ -938,72 +938,72 @@ namespace viras {
     friend CType operator-(CType x)                                                       \
     { return -1 * x; }                                                                    \
 
-  DEF_UMINUS(CNumeral)
-  DEF_UMINUS(CTerm)
+  DEF_UMINUS(Numeral)
+  DEF_UMINUS(Term)
 
 #define DEF_BMINUS(T1, T2)                                                                \
     friend auto operator-(T1 x, T2 y)                                                     \
     { return x + -y; }                                                                    \
 
-  DEF_BMINUS(CNumeral, CNumeral)
-  DEF_BMINUS(CTerm   , CNumeral)
-  DEF_BMINUS(CNumeral, CTerm   )
-  DEF_BMINUS(CTerm   , CTerm   )
+  DEF_BMINUS(Numeral, Numeral)
+  DEF_BMINUS(Term   , Numeral)
+  DEF_BMINUS(Numeral, Term   )
+  DEF_BMINUS(Term   , Term   )
 
      // ABS
 
-    friend CNumeral abs(CNumeral x) 
+    friend Numeral abs(Numeral x) 
     { return x < 0 ? -x : x; }
 
-    friend CNumeral num(CNumeral x)
-    { return CNumeral { x.config, x.config->num(x.inner) }; }
+    friend Numeral num(Numeral x)
+    { return Numeral { x.config, x.config->num(x.inner) }; }
 
-    friend CNumeral den(CNumeral x) 
-    { return CNumeral { x.config, x.config->den(x.inner) }; }
+    friend Numeral den(Numeral x) 
+    { return Numeral { x.config, x.config->den(x.inner) }; }
 
-    friend CNumeral lcm(CNumeral l, CNumeral r)
+    friend Numeral lcm(Numeral l, Numeral r)
     { 
-      auto cn = [&](auto x) { return CNumeral { l.config, x }; };
+      auto cn = [&](auto x) { return Numeral { l.config, x }; };
       return cn(l.config->lcm(num(l).inner, num(r).inner)) 
            / cn(l.config->gcd(den(l).inner, den(r).inner));  
     }
 
      // floor
-    friend CTerm floor(CTerm x) 
-    { return CTerm { x.config, x.config->floor(x.inner), }; }
+    friend Term floor(Term x) 
+    { return Term { x.config, x.config->floor(x.inner), }; }
 
-    friend CTerm ceil(CTerm x) 
+    friend Term ceil(Term x) 
     { return -floor(-x); }
 
 
-    friend CNumeral floor(CNumeral x) 
-    { return CNumeral { x.config, x.config->floor(x.inner), }; }
+    friend Numeral floor(Numeral x) 
+    { return Numeral { x.config, x.config->floor(x.inner), }; }
 
     // COMPARISIONS
 
-    friend bool operator<=(CNumeral lhs, CNumeral rhs) 
+    friend bool operator<=(Numeral lhs, Numeral rhs) 
     { return lhs.config->leq(lhs.inner, rhs.inner); }
 
-    friend bool operator<(CNumeral lhs, CNumeral rhs) 
+    friend bool operator<(Numeral lhs, Numeral rhs) 
     { return lhs.config->less(lhs.inner, rhs.inner); }
 
-    friend bool operator>=(CNumeral lhs, CNumeral rhs) 
+    friend bool operator>=(Numeral lhs, Numeral rhs) 
     { return rhs <= lhs; }
 
-    friend bool operator>(CNumeral lhs, CNumeral rhs) 
+    friend bool operator>(Numeral lhs, Numeral rhs) 
     { return rhs < lhs; }
 
 #define INT_CMP(OP)                                                                       \
-    friend bool operator OP (CNumeral lhs, int rhs)                                       \
-    { return lhs OP CNumeral  { lhs.config, lhs.config->numeral(rhs), }; }                \
+    friend bool operator OP (Numeral lhs, int rhs)                                       \
+    { return lhs OP Numeral  { lhs.config, lhs.config->numeral(rhs), }; }                \
                                                                                           \
-    friend bool operator OP (int lhs, CNumeral rhs)                                       \
-    { return CNumeral  { rhs.config, rhs.config->numeral(lhs), } OP rhs; }                \
+    friend bool operator OP (int lhs, Numeral rhs)                                       \
+    { return Numeral  { rhs.config, rhs.config->numeral(lhs), } OP rhs; }                \
 
-    friend CTerm quot(CTerm t, CNumeral p) { return floor(t / p); }
-    friend CTerm rem(CTerm t, CNumeral p) { return t - p * quot(t, p); }
+    friend Term quot(Term t, Numeral p) { return floor(t / p); }
+    friend Term rem(Term t, Numeral p) { return t - p * quot(t, p); }
 
-    friend CTerm subs(CTerm self, CVar var, CTerm by) {
+    friend Term subs(Term self, Var var, Term by) {
       return matchTerm(self, 
         /* var y */ [&](auto v) { return v == var ? by : self; }, 
 
@@ -1018,18 +1018,18 @@ namespace viras {
     }
 
 
-    static CTerm to_term(CNumeral n) 
+    static Term to_term(Numeral n) 
     { return Term { n.config, n.config->term(n.inner), }; }
 
-    static CNumeral to_numeral(Config* c, int n) 
+    static Numeral to_numeral(Config* c, int n) 
     { return Numeral { c, c->numeral(n), }; }
 
 #define LIFT_NUMERAL_TO_TERM_L(fn)                                                        \
-    friend auto fn(CNumeral const& lhs, CTerm const& rhs)                                 \
+    friend auto fn(Numeral const& lhs, Term const& rhs)                                 \
     { return fn(to_term(lhs), rhs); }
 
 #define LIFT_NUMERAL_TO_TERM_R(fn)                                                        \
-    friend auto fn(CTerm const& lhs, CNumeral const& rhs)                                 \
+    friend auto fn(Term const& lhs, Numeral const& rhs)                                 \
     { return fn(lhs, to_term(rhs)); }
 
 #define LIFT_NUMERAL_TO_TERM(fn)                                                          \
@@ -1038,40 +1038,22 @@ namespace viras {
 
 
 #define LITERAL_CONSTRUCTION_OPERATOR(fn, Sym)                                            \
-    friend CLiteral fn(CTerm lhs, CTerm rhs)                                              \
+    friend Literal fn(Term lhs, Term rhs)                                              \
     {                                                                                     \
       VIRAS_ASSERT(lhs.config == rhs.config);                                             \
-      return CLiteral { lhs.config, lhs.config->create_literal((lhs - rhs).inner, Sym) }; \
+      return Literal { lhs.config, lhs.config->create_literal((lhs - rhs).inner, Sym) }; \
     }                                                                                     \
                                                                                           \
     LIFT_NUMERAL_TO_TERM(fn)                                                              \
-    LIFT_INT_TO_NUMERAL(fn, CTerm)                                                        \
+    LIFT_INT_TO_NUMERAL(fn, Term)                                                        \
 
     LITERAL_CONSTRUCTION_OPERATOR(operator> , PredSymbol::Gt);
     LITERAL_CONSTRUCTION_OPERATOR(operator>=, PredSymbol::Geq);
     LITERAL_CONSTRUCTION_OPERATOR(eq, PredSymbol::Neq);
     LITERAL_CONSTRUCTION_OPERATOR(neq, PredSymbol::Eq);
-//
-// #define FLIPPED_LITERAL_CONSTRUCTION_OPERATOR(fn, flipped)                                \
-//     friend CLiteral fn(CTerm lhs, CTerm rhs)                                              \
-//     { return flipped(rhs, lhs); }                                                         \
-//                                                                                           \
-//     LIFT_NUMERAL_TO_TERM(fn)                                                              \
-//     LIFT_INT_TO_NUMERAL(fn, CTerm)                                                        \
-//    
-//     FLIPPED_LITERAL_CONSTRUCTION_OPERATOR(operator< , operator>)
-//     FLIPPED_LITERAL_CONSTRUCTION_OPERATOR(operator<=, operator>=)
-//
 
     // END OF SYNTAX SUGAR STUFF
 
-
-    // TODO get rid of this
-    using Term     = CTerm;
-    using Numeral  = CNumeral;
-    using Var      = CVar;
-    using Literals = CLiterals;
-    using Literal  = CLiteral;
 
     Config _config;
   public:
@@ -1084,13 +1066,6 @@ namespace viras {
       Term t;
       Numeral p;
       Break(Term t, Numeral p) : t(t), p(p) { VIRAS_ASSERT(p > 0) }
-      // Break(Term t, Numeral n) {
-      //   // std::optional<Term> trm;
-      //   std::vector<Term> result;
-      //   for_monom(t, [](auto n, auto t) {
-      //
-      //   });
-      // }
       friend std::ostream& operator<<(std::ostream& out, Break const& self)
       { return out << self.t << " + " << self.p << "ℤ"; }
       DERIVE_TUPLE(Break,t,p)
@@ -1106,8 +1081,8 @@ namespace viras {
     template<class T>
     struct Expr : public std::variant<T> { };
 
-    friend CTerm grid_ceil (CTerm t, Break s_pZ) { return t + rem(s_pZ.t - t, s_pZ.p); }
-    friend CTerm grid_floor(CTerm t, Break s_pZ) { return t - rem(t - s_pZ.t, s_pZ.p); }
+    friend Term grid_ceil (Term t, Break s_pZ) { return t + rem(s_pZ.t - t, s_pZ.p); }
+    friend Term grid_floor(Term t, Break s_pZ) { return t - rem(t - s_pZ.t, s_pZ.p); }
 
     struct LiraTerm {
       Term self;
@@ -1162,7 +1137,7 @@ namespace viras {
     struct ZComp {
       Numeral period;
 
-      ZComp(Numeral period) : period(period) {}
+      explicit ZComp(Numeral period) : period(period) {}
 
       friend std::ostream& operator<<(std::ostream& out, ZComp const& self)
       { return out << self.period << "ℤ"; }
@@ -1211,20 +1186,21 @@ namespace viras {
         IfFloor if_floor
         ) -> decltype(auto) {
       return t.config->matchTerm(t.inner,
-        [&](auto x) { return if_var(CVar{ t.config, x }); }, 
+        [&](auto x) { return if_var(Var{ t.config, x }); }, 
         [&]() { return if_one(); }, 
-        [&](auto l, auto r) { return if_mul(CNumeral{t.config, l},CTerm{t.config, r}); }, 
-        [&](auto l, auto r) { return if_add(CTerm{t.config, l},CTerm{t.config, r}); }, 
-        [&](auto x) { return if_floor(CTerm{t.config, x}); }
+        [&](auto l, auto r) { return if_mul(Numeral{t.config, l},Term{t.config, r}); }, 
+        [&](auto l, auto r) { return if_add(Term{t.config, l},Term{t.config, r}); }, 
+        [&](auto x) { return if_floor(Term{t.config, x}); }
            );
     }
 
-    Numeral numeral(int i)  { return CNumeral { &_config, _config.numeral(i)}; }
-    Term    term(Numeral n) { return CTerm    { &_config, _config.term(n.inner) }; }
-    Term    term(Var v)     { return CTerm    { &_config, _config.term(v.inner) }; }
+    Numeral numeral(int i)  { return Numeral { &_config, _config.numeral(i)}; }
+    Term    term(Numeral n) { return Term    { &_config, _config.term(n.inner) }; }
+    Term    term(Var v)     { return Term    { &_config, _config.term(v.inner) }; }
     Term    term(int i)     { return term(numeral(i)); }
+
     // TODO guard with macro
-    Var test_var(const char* name) { return CVar { &_config, _config.test_var(name) }; }
+    Var test_var(const char* name) { return Var { &_config, _config.test_var(name) }; }
 
     enum class Bound {
       Open,
@@ -1536,7 +1512,7 @@ namespace viras {
 
 
     std::vector<LiraLiteral> analyse(typename Config::Literals const& self, typename Config::Var x) 
-    { return analyse(CLiterals { &_config, self }, CVar { &_config, x }); }
+    { return analyse(Literals { &_config, self }, Var { &_config, x }); }
 
     struct Epsilon {
       friend std::ostream& operator<<(std::ostream& out, Epsilon const& self)
@@ -1725,7 +1701,7 @@ namespace viras {
         | iter::flat_map([&](auto lit) { return elim_set(x, *lit); }); }
 
     Literal literal(Term t, PredSymbol s) 
-    { return CLiteral { &_config, _config.create_literal(t.inner, s), }; }
+    { return Literal { &_config, _config.create_literal(t.inner, s), }; }
 
     Literal literal(bool b) { return literal(term(0), b ? PredSymbol::Eq : PredSymbol::Neq); }
 
@@ -1844,14 +1820,14 @@ namespace viras {
     auto quantifier_elimination(typename Config::Var x, Literals const& ls)
     {
       auto lits = std::make_unique<std::vector<LiraLiteral>>(analyse(ls, x));
-      return quantifier_elimination(CVar { &_config, x }, *lits)
+      return quantifier_elimination(Var { &_config, x }, *lits)
         | iter::inspect([ /* we store the pointer to the literals in this closure */ lits = std::move(lits)](auto) { })
         | iter::map([&](auto lits) { return std::move(lits) | iter::map([](auto lit) { return lit.inner; }); });
     }
 
     auto quantifier_elimination(typename Config::Var x, std::vector<LiraLiteral> const& lits)
     {
-      return quantifier_elimination(CVar { &_config, x }, lits)
+      return quantifier_elimination(Var { &_config, x }, lits)
         | iter::map([&](auto lits) { return std::move(lits) | iter::map([](auto lit) { return lit.inner; }); });
     }
 

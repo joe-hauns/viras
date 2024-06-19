@@ -1,6 +1,7 @@
 #pragma once
 #include "viras.h"
 #include <regex>
+#include <sstream>
 
 namespace viras {
 
@@ -20,12 +21,15 @@ namespace viras {
   }
 
 
-  // TODO use this instead of outputToString
-  // template<class... As>
-  // std::string output_to_string(As const&... as) 
-  // { std::string_stream;  }
+// TODO move to viras/lib.h
+template<class... Ts> 
+std::string output_to_string(Ts const&... ts)
+{ 
+  std::stringstream out;
+  (out << ... << ts);
+  return out.str();
+}
 
-#define pretty(...) __VA_ARGS__
 template<class Config>
 struct VirasTest : Viras<Config> {
 
@@ -36,11 +40,9 @@ struct VirasTest : Viras<Config> {
   using Literal     = typename Viras<Config>::Literal;
   using Literals    = typename Viras<Config>::Literals;
   using Term        = typename Viras<Config>::Term;
-  using CTerm       = typename Viras<Config>::CTerm;
   using LiraTerm    = typename Viras<Config>::LiraTerm;
   using Var         = typename Viras<Config>::Var;
   using Numeral     = typename Viras<Config>::Numeral;
-  using CNumeral    = typename Viras<Config>::CNumeral;
   using Break       = typename Viras<Config>::Break;
   using Viras<Config>::epsilon;
   using Viras<Config>::Z;
@@ -56,7 +58,7 @@ struct VirasTest : Viras<Config> {
     std::optional<std::string> check(std::vector<VirtualTerm> const& result) {
       for (auto& s : arrayIter(expected)) {
         if (!arrayIter(result).any([&](auto& res) { return res == s; }) ) {
-          return string(outputToString("not found: ", s));
+          return output_to_string("not found: ", s);
         }
       }
       return {};
@@ -95,12 +97,12 @@ struct VirasTest : Viras<Config> {
       auto error = expected.check(result);
       if (error) {
         return std::optional<std::string>(
-            std::string(outputToString(
-                     "[    input ] ", conj, "\n",
-                     "[   result ] ", result, "\n",
-                     "[    error ] ", *error, "\n",
-                     "[ expected ] ",    expected, "\n"
-                ))
+            output_to_string(
+              "[    input ] ", conj, "\n",
+              "[   result ] ", result, "\n",
+              "[    error ] ", *error, "\n",
+              "[ expected ] ",    expected, "\n"
+              )
             );
       } else {
         return std::optional<std::string>();
@@ -205,12 +207,12 @@ struct VirasTest : Viras<Config> {
     if(lhs == rhs)  {                                                                     \
       return std::optional<std::string>();                                                \
     } else {                                                                              \
-      return std::string(outputToString(                                                  \
-                      "[    input ] ", input, "\n",                                       \
-                      "[    query ] ", #lhs, "\n",                                        \
-                      "[    value ] ", lhs, "\n",                                         \
-                      "[ expected ] ", rhs, "\n"                                          \
-                ));                                                                       \
+      return output_to_string(                                                  \
+          "[    input ] ", input, "\n",                                       \
+          "[    query ] ", #lhs, "\n",                                        \
+          "[    value ] ", lhs, "\n",                                         \
+          "[ expected ] ", rhs, "\n"                                          \
+          );                                                                       \
     }                                                                                     \
   }
 
@@ -499,7 +501,4 @@ struct VirasTest : Viras<Config> {
 
 };
 
-
-
-};
-#undef pretty
+} // namespace viras
