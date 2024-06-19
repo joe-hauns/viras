@@ -1,5 +1,5 @@
 #pragma once
-#include "viras/config.h"
+#include "viras/config_macros.h"
 #include "viras/output.h"
 #include "viras/iter.h"
 #include "viras/derive.h"

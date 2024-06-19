@@ -1,5 +1,5 @@
 #pragma once
-#include "viras/config.h"
+#include "viras/config_macros.h"
 
 #include <iostream>
 #include <sstream>
