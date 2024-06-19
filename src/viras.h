@@ -547,8 +547,6 @@ namespace viras {
     }
   }
 
-
-
   template<class Config>
   struct SimplifyingConfig {
     Config config;
@@ -579,10 +577,6 @@ namespace viras {
         /* floor */ [&](auto t) { return floor(simpl(t)); }
         );
     } // TODO
-
-
-    
-    // typename Viras<Config>::VirtualTerm simpl(typename Viras<Config>::VirtualTerm self);
 
     Term term(Numeral n) { return config.term(n); }
     Term term(Var v) { return config.term(v); }
@@ -636,32 +630,6 @@ namespace viras {
         /* l + r */ [&](auto l, auto r) { return std::optional<Numeral>(); }, 
         /* floor */ [&](auto t) { return std::optional<Numeral>(); }); 
     };
-
-    // template<class F>
-    // auto for_monom2(Term self, F f) {
-    //   auto dflt = [&](auto...args){ f(numeral(1), self); return std::make_tuple(); };
-    //   matchTerm(self, 
-    //     /* var v */ dflt, 
-    //
-    //     /* numeral 1 */ dflt,
-    //     /* k * t */ [&](auto k, auto t) { 
-    //       f(k, t);  
-    //       return std::make_tuple(); 
-    //     }, 
-    //     // /* k * t */ [&](auto k, auto t) { f(k, t);  return std::make_tuple(); }, 
-    //
-    //     /* l + r */ [&](auto l, auto r) { 
-    //       for_monom2(l, f);
-    //       for_monom2(r, f);
-    //       return std::make_tuple();
-    //     }, 
-    //
-    //     /* floor */ dflt
-    //     );
-    // }
-
-
-
 
     template<class F>
     void __for_monom(Term const& self, F& f, Numeral& prod) {
@@ -720,15 +688,6 @@ namespace viras {
       addUp(r);
 
       return iterToSum(iter::stl(summands));
-
-
-      // auto numL = tryNumeral(l);
-      // auto numR = tryNumeral(r);
-      //
-      // return isZero(l) ? r 
-      //      : isZero(r) ? l
-      //      : numL && numR ? term(config.add(*numL, *numR))
-      //      : config.add(l,r); 
     }
 
     Term floor(Term t) { 
@@ -766,9 +725,6 @@ namespace viras {
         update(outer, config.floor(in_t), [&](auto n) { return n + numeral(1); });
       }
       return iterToSum(iter::stl(outer));
-
-      // auto tNum = tryNumeral(t);
-      // return tNum ? term(floor(*tNum)) : config.floor(t); 
     }
 
     Numeral inverse(Numeral n) { return config.inverse(n); }
