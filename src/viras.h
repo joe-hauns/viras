@@ -2,36 +2,14 @@
 #include "viras/config.h"
 #include "viras/output.h"
 #include "viras/iter.h"
+#include "viras/derive.h"
+#include "viras/sugar.h"
 
 #include <map>
 #include <tuple>
 
-#define DERIVE_TUPLE(Slf,...)                                                             \
-      using Self = Slf;                                                                   \
-      auto asTuple() const { return std::tie(__VA_ARGS__); }                              \
-
-#define DERIVE_TUPLE_EQ                                                                   \
-      friend bool operator==(Self const& lhs, Self const& rhs)                            \
-      { return lhs.asTuple() == rhs.asTuple(); }                                          \
-
-#define DERIVE_TUPLE_LESS                                                                 \
-      friend bool operator<(Self const& lhs, Self const& rhs)                             \
-      { return lhs.asTuple() < rhs.asTuple(); }                                           \
-
-
 namespace viras {
 
-  enum class PredSymbol { Gt, Geq, Neq, Eq, };
-
-  inline std::ostream& operator<<(std::ostream& out, PredSymbol const& self)
-  { 
-    switch(self) {
-      case PredSymbol::Gt: return out << ">";
-      case PredSymbol::Geq: return out << ">=";
-      case PredSymbol::Neq: return out << "=";
-      case PredSymbol::Eq: return out << "!=";
-    }
-  }
 
   template<class Config>
   struct SimplifyingConfig {
@@ -249,6 +227,7 @@ namespace viras {
   auto simplifyingConfig(Config c)
   { return SimplifyingConfig<Config>(std::move(c)); }
 
+  using namespace sugar;
 
   template<class Config
     , bool optimizeBounds = true
@@ -259,243 +238,11 @@ namespace viras {
     template<class Conf>
     friend class VirasTest;
 
-  // START OF SYNTAX SUGAR STUFF
-
-    template<class T>
-    struct WithConfig { 
-      Config* config; 
-      T inner; 
-      friend bool operator!=(WithConfig l, WithConfig r) 
-      { return !(l == r); }
-      friend std::ostream& operator<<(std::ostream& out, WithConfig const& self)
-      { return out << output::ptr(self.inner); }
-      DERIVE_TUPLE(WithConfig, inner)
-      DERIVE_TUPLE_EQ
-      DERIVE_TUPLE_LESS
-    };
-
-    struct Term : public WithConfig<typename Config::Term> { };
-    struct Numeral : public WithConfig<typename Config::Numeral> {};
-    struct Var : public WithConfig<typename Config::Var> {};
-    struct Literal : public WithConfig<typename Config::Literal> {
-      Term term() const
-      { return Term {this->config, this->config->term_of_literal(this->inner)}; }
-
-      PredSymbol symbol() const
-      { return this->config->symbol_of_literal(this->inner); }
-
-      friend std::ostream& operator<<(std::ostream& out, Literal const& self)
-      { return out << self.term() << " " << self.symbol() << " 0"; }
-    };
-    struct Literals : public WithConfig<typename Config::Literals> {
-      auto size() const { return this->config->literals_size(this->inner); }
-      auto operator[](size_t idx) const { 
-        return Literal { this->config, this->config->literals_get(this->inner, idx) }; 
-      }
-    };
-
-    ///////////////////////////////////////
-    // PRIMARY OPERATORS
-    ///////////////////////////////////////
-
-    friend Term operator+(Term lhs, Term rhs) 
-    {
-      VIRAS_ASSERT(lhs.config == rhs.config);
-      return Term {lhs.config, lhs.config->add(lhs.inner, rhs.inner)};
-    }
-
-    friend Term operator*(Numeral lhs, Term rhs) 
-    {
-      VIRAS_ASSERT(lhs.config == rhs.config);
-      return Term {lhs.config, lhs.config->mul(lhs.inner, rhs.inner)};
-    }
-
-    friend Numeral operator*(Numeral lhs, Numeral rhs) 
-    {
-      VIRAS_ASSERT(lhs.config == rhs.config);
-      return Numeral {lhs.config, lhs.config->mul(lhs.inner, rhs.inner)};
-    }
-
-    ///////////////////////////////////////
-    // LIFTED OPERATORS
-    ///////////////////////////////////////
-
-    friend Numeral operator+(Numeral lhs, Numeral rhs) 
-    { return Numeral { lhs.config, lhs.config->add(lhs.inner, rhs.inner)}; }
-
-    friend Term operator+(Numeral lhs, Term rhs) 
-    { return Term { rhs.config, lhs.config->term(lhs.inner)} + rhs; }
-
-    friend Term operator+(Term lhs, Numeral rhs) 
-    { return lhs + Term { rhs.config, rhs.config->term(rhs.inner), }; }
-
-#define LIFT_INT_TO_NUMERAL(function, CType)                                              \
-    LIFT_INT_TO_NUMERAL_L(function, CType)                                                \
-    LIFT_INT_TO_NUMERAL_R(function, CType)                                                \
-
-
-#define LIFT_INT_TO_NUMERAL_L(function, CType)                                            \
-    friend auto function(int lhs, CType rhs)                                              \
-    { return function(Numeral {rhs.config, rhs.config->numeral(lhs)}, rhs); }            \
-
-#define LIFT_INT_TO_NUMERAL_R(function, CType)                                            \
-    friend auto function(CType lhs, int rhs)                                              \
-    { return function(lhs, Numeral {lhs.config, lhs.config->numeral(rhs)}); }            \
-
-#define LIFT_INT_TO_NUMERAL(function, CType)                                              \
-    LIFT_INT_TO_NUMERAL_L(function, CType)                                                \
-    LIFT_INT_TO_NUMERAL_R(function, CType)                                                \
-
-    LIFT_INT_TO_NUMERAL(operator+, Numeral)
-    LIFT_INT_TO_NUMERAL(operator-, Numeral)
-    LIFT_INT_TO_NUMERAL(operator*, Numeral)
-
-    LIFT_INT_TO_NUMERAL(operator==, Numeral)
-    LIFT_INT_TO_NUMERAL(operator!=, Numeral)
-    LIFT_INT_TO_NUMERAL(operator<=, Numeral)
-    LIFT_INT_TO_NUMERAL(operator>=, Numeral)
-    LIFT_INT_TO_NUMERAL(operator< , Numeral)
-    LIFT_INT_TO_NUMERAL(operator> , Numeral)
-
-    LIFT_INT_TO_NUMERAL(operator+, Term)
-    LIFT_INT_TO_NUMERAL(operator-, Term)
-    LIFT_INT_TO_NUMERAL_L(operator*, Term)
-
-
-     // MULTIPLICATION
-     // DIVISION
-
-    friend Term operator/(Term lhs, Numeral rhs) 
-    { return (1 / rhs) * lhs; }
-
-    friend Numeral operator/(Numeral lhs, Numeral rhs) 
-    { return Numeral{ rhs.config, rhs.config->inverse(rhs.inner) } * lhs; }
-
-    LIFT_INT_TO_NUMERAL_R(operator/, Term)
-    LIFT_INT_TO_NUMERAL(operator/, Numeral)
-
-     // MINUS
-
-#define DEF_UMINUS(CType)                                                                 \
-    friend CType operator-(CType x)                                                       \
-    { return -1 * x; }                                                                    \
-
-  DEF_UMINUS(Numeral)
-  DEF_UMINUS(Term)
-
-#define DEF_BMINUS(T1, T2)                                                                \
-    friend auto operator-(T1 x, T2 y)                                                     \
-    { return x + -y; }                                                                    \
-
-  DEF_BMINUS(Numeral, Numeral)
-  DEF_BMINUS(Term   , Numeral)
-  DEF_BMINUS(Numeral, Term   )
-  DEF_BMINUS(Term   , Term   )
-
-     // ABS
-
-    friend Numeral abs(Numeral x) 
-    { return x < 0 ? -x : x; }
-
-    friend Numeral num(Numeral x)
-    { return Numeral { x.config, x.config->num(x.inner) }; }
-
-    friend Numeral den(Numeral x) 
-    { return Numeral { x.config, x.config->den(x.inner) }; }
-
-    friend Numeral lcm(Numeral l, Numeral r)
-    { 
-      auto cn = [&](auto x) { return Numeral { l.config, x }; };
-      return cn(l.config->lcm(num(l).inner, num(r).inner)) 
-           / cn(l.config->gcd(den(l).inner, den(r).inner));  
-    }
-
-     // floor
-    friend Term floor(Term x) 
-    { return Term { x.config, x.config->floor(x.inner), }; }
-
-    friend Term ceil(Term x) 
-    { return -floor(-x); }
-
-
-    friend Numeral floor(Numeral x) 
-    { return Numeral { x.config, x.config->floor(x.inner), }; }
-
-    // COMPARISIONS
-
-    friend bool operator<=(Numeral lhs, Numeral rhs) 
-    { return lhs.config->leq(lhs.inner, rhs.inner); }
-
-    friend bool operator<(Numeral lhs, Numeral rhs) 
-    { return lhs.config->less(lhs.inner, rhs.inner); }
-
-    friend bool operator>=(Numeral lhs, Numeral rhs) 
-    { return rhs <= lhs; }
-
-    friend bool operator>(Numeral lhs, Numeral rhs) 
-    { return rhs < lhs; }
-
-#define INT_CMP(OP)                                                                       \
-    friend bool operator OP (Numeral lhs, int rhs)                                       \
-    { return lhs OP Numeral  { lhs.config, lhs.config->numeral(rhs), }; }                \
-                                                                                          \
-    friend bool operator OP (int lhs, Numeral rhs)                                       \
-    { return Numeral  { rhs.config, rhs.config->numeral(lhs), } OP rhs; }                \
-
-    friend Term quot(Term t, Numeral p) { return floor(t / p); }
-    friend Term rem(Term t, Numeral p) { return t - p * quot(t, p); }
-
-    friend Term subs(Term self, Var var, Term by) {
-      return matchTerm(self, 
-        /* var y */ [&](auto v) { return v == var ? by : self; }, 
-
-        /* numeral 1 */ [&]() { return self; }, 
-        /* k * t */ [&](auto k, auto t) { return k * subs(t, var, by); }, 
-
-        /* l + r */ [&](auto l, auto r) { 
-          return subs(l,var,by) + subs(r,var,by);
-        }, 
-
-        /* floor */ [&](auto t) { return floor(subs(t,var,by)); });
-    }
-
-
-    static Term to_term(Numeral n) 
-    { return Term { n.config, n.config->term(n.inner), }; }
-
-    static Numeral to_numeral(Config* c, int n) 
-    { return Numeral { c, c->numeral(n), }; }
-
-#define LIFT_NUMERAL_TO_TERM_L(fn)                                                        \
-    friend auto fn(Numeral const& lhs, Term const& rhs)                                 \
-    { return fn(to_term(lhs), rhs); }
-
-#define LIFT_NUMERAL_TO_TERM_R(fn)                                                        \
-    friend auto fn(Term const& lhs, Numeral const& rhs)                                 \
-    { return fn(lhs, to_term(rhs)); }
-
-#define LIFT_NUMERAL_TO_TERM(fn)                                                          \
-    LIFT_NUMERAL_TO_TERM_L(fn)                                                            \
-    LIFT_NUMERAL_TO_TERM_R(fn)                                                            \
-
-
-#define LITERAL_CONSTRUCTION_OPERATOR(fn, Sym)                                            \
-    friend Literal fn(Term lhs, Term rhs)                                              \
-    {                                                                                     \
-      VIRAS_ASSERT(lhs.config == rhs.config);                                             \
-      return Literal { lhs.config, lhs.config->create_literal((lhs - rhs).inner, Sym) }; \
-    }                                                                                     \
-                                                                                          \
-    LIFT_NUMERAL_TO_TERM(fn)                                                              \
-    LIFT_INT_TO_NUMERAL(fn, Term)                                                        \
-
-    LITERAL_CONSTRUCTION_OPERATOR(operator> , PredSymbol::Gt);
-    LITERAL_CONSTRUCTION_OPERATOR(operator>=, PredSymbol::Geq);
-    LITERAL_CONSTRUCTION_OPERATOR(eq, PredSymbol::Neq);
-    LITERAL_CONSTRUCTION_OPERATOR(neq, PredSymbol::Eq);
-
-    // END OF SYNTAX SUGAR STUFF
-
+    using Numeral  = sugar::Numeral<Config>;
+    using Term     = sugar::Term<Config>;
+    using Literals = sugar::Literals<Config>;
+    using Literal  = sugar::Literal<Config>;
+    using Var      = sugar::Var<Config>;
 
     Config _config;
   public:
@@ -542,6 +289,7 @@ namespace viras {
                                        : distYminus         );
       }
       Term distXplus() const { 
+        using namespace sugar;
         return  -(1 / oslp) * (oslp > 0 ? distYminus
                                         : distYminus + deltaY);
 
@@ -618,23 +366,6 @@ namespace viras {
       friend std::ostream& operator<<(std::ostream& out, LiraLiteral const& self)
       { return out << self.term << " " << self.symbol << " 0"; }
     };
-
-    template<class IfVar, class IfOne, class IfMul, class IfAdd, class IfFloor>
-    friend auto matchTerm(Term t, 
-        IfVar   if_var, 
-        IfOne   if_one, 
-        IfMul   if_mul, 
-        IfAdd   if_add, 
-        IfFloor if_floor
-        ) -> decltype(auto) {
-      return t.config->matchTerm(t.inner,
-        [&](auto x) { return if_var(Var{ t.config, x }); }, 
-        [&]() { return if_one(); }, 
-        [&](auto l, auto r) { return if_mul(Numeral{t.config, l},Term{t.config, r}); }, 
-        [&](auto l, auto r) { return if_add(Term{t.config, l},Term{t.config, r}); }, 
-        [&](auto x) { return if_floor(Term{t.config, x}); }
-           );
-    }
 
     Numeral numeral(int i)  { return Numeral { &_config, _config.numeral(i)}; }
     Term    term(Numeral n) { return Term    { &_config, _config.term(n.inner) }; }
