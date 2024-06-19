@@ -1,34 +1,8 @@
 #pragma once
 #include "viras.h"
 #include <regex>
-#include <sstream>
 
 namespace viras {
-
-  template<class A>
-  std::ostream& operator<<(std::ostream& out, std::vector<A> const& v) {
-    out << "[ ";
-    auto fst = true;
-    for (auto& x : v) {
-      if (fst) {
-        fst = false;
-      } else {
-        out << ", ";
-      }
-      out << x;
-    }
-    return out << " ]";
-  }
-
-
-// TODO move to viras/lib.h
-template<class... Ts> 
-std::string output_to_string(Ts const&... ts)
-{ 
-  std::stringstream out;
-  (out << ... << ts);
-  return out.str();
-}
 
 template<class Config>
 struct VirasTest : Viras<Config> {

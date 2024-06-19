@@ -1,5 +1,10 @@
 #pragma once
+
+#include "viras/output.h"
 #include <set>
+#include <optional>
+#include <tuple>
+#include <vector>
 
 namespace viras {
    namespace iter {
@@ -250,7 +255,7 @@ namespace viras {
       });
     }
 
-#define iter_dbg(lvl, ...) ::viras::iter::inspect([=](auto x) { VIRAS_LOG(lvl, __VA_ARGS__, ": ", outputPtr(x)); })
+#define iter_dbg(lvl, ...) ::viras::iter::inspect([=](auto x) { VIRAS_LOG(lvl, __VA_ARGS__, ": ", output::ptr(x)); })
     template<class M>
     auto dbg(M msg) {
       return inspect([msg = std::move(msg)](auto x) { VIRAS_LOG(msg, ": ", outputPtr(x)); });
@@ -325,12 +330,6 @@ namespace viras {
       > auto array(Array      & a)
     { return range(0, a.size()) | map([&](auto i) { return a[i]; }); }
 
-
-    // template<class Array> auto array_ptr(Array const& a)
-    // { return range(0, a.size()) | map([&](auto i) { return &a[i]; }); }
-    //
-    // template<class Array> auto array_ptr(Array      & a)
-    // { return range(0, a.size()) | map([&](auto i) { return &a[i]; }); }
 
     template<class F>
     struct ClosureIter {

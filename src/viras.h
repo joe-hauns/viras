@@ -1,25 +1,8 @@
 #pragma once
-
-#ifndef VIRAS_ASSERT
-#include <cassert>
-#define VIRAS_ASSERT(...) assert(__VA_ARGS__);
-#endif // VIRAS_ASSERT
-
-
-#ifndef VIRAS_DEBUG_LEVEL
-#define VIRAS_DEBUG_LEVEL 0
-#endif
-
-#ifndef VIRAS_LOG
-template<class... As>
-void __viras_log_all(As const& ... as) { (std::cout << ... << as); }
-#define VIRAS_LOG(lvl, ...) if (lvl < VIRAS_DEBUG_LEVEL) { __viras_log_all("[ viras ] ", __FILE__, "\t@ ", __LINE__, ":\t", __VA_ARGS__, "\n"); }
-#endif // VIRAS_ASSERT
-
-
+#include "viras/config.h"
+#include "viras/output.h"
 #include "viras/iter.h"
-#include <optional>
-#include <iostream>
+
 #include <map>
 #include <tuple>
 
@@ -37,19 +20,6 @@ void __viras_log_all(As const& ... as) { (std::cout << ... << as); }
 
 
 namespace viras {
-
-  template<class C>
-  struct OutputPtr  { C const& self; };
-  template<class C>
-  OutputPtr<C> outputPtr(C const& c)  { return OutputPtr<C> { c }; }
-
-  template<class C>
-  std::ostream& operator<<(std::ostream& out, OutputPtr<C*> const& self)
-  { return self.self == nullptr ? out << "nullptr" : out << *self.self; }
-
-  template<class C>
-  std::ostream& operator<<(std::ostream& out, OutputPtr<C> const& self)
-  { return out << self.self; }
 
   enum class PredSymbol { Gt, Geq, Neq, Eq, };
 
@@ -92,7 +62,7 @@ namespace viras {
         /* l + r */ [&](auto l, auto r) { return add(simpl(l), simpl(r)); }, 
         /* floor */ [&](auto t) { return floor(simpl(t)); }
         );
-    } // TODO
+    }
 
     Term term(Numeral n) { return config.term(n); }
     Term term(Var v) { return config.term(v); }
@@ -298,7 +268,7 @@ namespace viras {
       friend bool operator!=(WithConfig l, WithConfig r) 
       { return !(l == r); }
       friend std::ostream& operator<<(std::ostream& out, WithConfig const& self)
-      { return out << outputPtr(self.inner); }
+      { return out << output::ptr(self.inner); }
       DERIVE_TUPLE(WithConfig, inner)
       DERIVE_TUPLE_EQ
       DERIVE_TUPLE_LESS
@@ -671,7 +641,6 @@ namespace viras {
     Term    term(Var v)     { return Term    { &_config, _config.term(v.inner) }; }
     Term    term(int i)     { return term(numeral(i)); }
 
-    // TODO guard with macro
     Var test_var(const char* name) { return Var { &_config, _config.test_var(name) }; }
 
     enum class Bound {
@@ -703,29 +672,7 @@ namespace viras {
     }
 
     // TODO get rid of implicit copies of LiraTerm
-
-    // template<class MatchRec>
-    // Numeral calcDeltaY(LiraTerm const& self, Var const& x, MatchRec matchRec) {
-    //    return self.per == 0 
-    //      ? numeral(0) 
-    //      : matchRec(
-    //     /* var y */ [&](auto y) 
-    //     { return numeral(0); },
-    //
-    //     /* numeral 1 */ [&]() 
-    //     { return numeral(0); },
-    //
-    //     /* k * t */ [&](auto k, auto t, auto rec) 
-    //     { return  abs(k) * rec->deltaY; }, 
-    //
-    //     /* l + r */ [&](auto l, auto r, auto& rec_l, auto& rec_r) 
-    //     { return rec_l.deltaY + rec_r.deltaY; },
-    //
-    //     /* floor t */   [&](auto t, auto& rec) 
-    //     { return rec.deltaY + 1; }
-    //     );
-    // }
-
+    // TODO make it possible to fail gracefully with uniterpreted stuff
 
     template<class MatchRec>
     Term calcLim(LiraTerm const& self, Var const& x, MatchRec matchRec) {
