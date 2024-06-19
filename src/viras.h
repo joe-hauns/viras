@@ -637,28 +637,28 @@ namespace viras {
         /* floor */ [&](auto t) { return std::optional<Numeral>(); }); 
     };
 
-    template<class F>
-    auto for_monom2(Term self, F f) {
-      auto dflt = [&](auto...args){ f(numeral(1), self); return std::make_tuple(); };
-      matchTerm(self, 
-        /* var v */ dflt, 
-
-        /* numeral 1 */ dflt,
-        /* k * t */ [&](auto k, auto t) { 
-          f(k, t);  
-          return std::make_tuple(); 
-        }, 
-        // /* k * t */ [&](auto k, auto t) { f(k, t);  return std::make_tuple(); }, 
-
-        /* l + r */ [&](auto l, auto r) { 
-          for_monom2(l, f);
-          for_monom2(r, f);
-          return std::make_tuple();
-        }, 
-
-        /* floor */ dflt
-        );
-    }
+    // template<class F>
+    // auto for_monom2(Term self, F f) {
+    //   auto dflt = [&](auto...args){ f(numeral(1), self); return std::make_tuple(); };
+    //   matchTerm(self, 
+    //     /* var v */ dflt, 
+    //
+    //     /* numeral 1 */ dflt,
+    //     /* k * t */ [&](auto k, auto t) { 
+    //       f(k, t);  
+    //       return std::make_tuple(); 
+    //     }, 
+    //     // /* k * t */ [&](auto k, auto t) { f(k, t);  return std::make_tuple(); }, 
+    //
+    //     /* l + r */ [&](auto l, auto r) { 
+    //       for_monom2(l, f);
+    //       for_monom2(r, f);
+    //       return std::make_tuple();
+    //     }, 
+    //
+    //     /* floor */ dflt
+    //     );
+    // }
 
 
 
@@ -841,6 +841,9 @@ namespace viras {
 
       PredSymbol symbol() const
       { return this->config->symbol_of_literal(this->inner); }
+
+      friend std::ostream& operator<<(std::ostream& out, CLiteral const& self)
+      { return out << self.term() << " " << self.symbol() << " 0"; }
     };
     struct CLiterals : public WithConfig<typename Config::Literals> {
       auto size() const { return this->config->literals_size(this->inner); }
@@ -1080,6 +1083,14 @@ namespace viras {
     struct Break {
       Term t;
       Numeral p;
+      Break(Term t, Numeral p) : t(t), p(p) { VIRAS_ASSERT(p > 0) }
+      // Break(Term t, Numeral n) {
+      //   // std::optional<Term> trm;
+      //   std::vector<Term> result;
+      //   for_monom(t, [](auto n, auto t) {
+      //
+      //   });
+      // }
       friend std::ostream& operator<<(std::ostream& out, Break const& self)
       { return out << self.t << " + " << self.p << "ℤ"; }
       DERIVE_TUPLE(Break,t,p)
@@ -1228,8 +1239,6 @@ namespace viras {
           case Bound::Closed: return grid_ceil(t, s_pZ);
         };
       }();
-      DBGE(t)
-      DBGE(start)
       VIRAS_ASSERT(k != 0 || (l == Bound::Closed && r == Bound::Closed));
       return iter::if_then_(optimizeGridIntersection && k == 0, iter::vals(start))
                    else____(iter::nat_iter(numeral(0))
@@ -1404,7 +1413,7 @@ namespace viras {
           VIRAS_ASSERT(self.per != 0 || rec.per == 0);
           return optimizeBounds 
                ? (self.per == 0 ? floor(rec.distYminus) :  rec.distYminus - 1)
-               :                                            rec.distYminus - 1 ; }
+               :                                           rec.distYminus - 1 ; }
         );
     }
 
@@ -1428,31 +1437,31 @@ namespace viras {
         }
 
         /* floor t */ , [&](auto t, auto& rec)  {
-        if (rec.sslp == 0) {
-          return std::move(rec.breaks);
-        } else if (rec.breaks.empty()) {
-          return std::vector<Break>{Break {rec.zero(term(0)), self.per}};
-        } else {
-          auto p_min = *(iter::array(rec.breaks) 
-            | iter::map([](auto b) -> Numeral { return b->p; })
-            | iter::min);
-          auto breaks = std::vector<Break>();
-          for ( auto b0p_pZ : rec.breaks ) {
-            auto b0p = b0p_pZ.t;
-            auto p   = b0p_pZ.p;
-            intersectGrid(b0p_pZ, 
-                          Bound::Closed, b0p, self.per, Bound::Open) 
-              | iter::foreach([&](auto b0) {
-                  intersectGrid(Break{rec.zero(b0), 1/rec.sslp}, 
-                                Bound::Closed, b0, p_min, Bound::Open)
-                    | iter::foreach([&](auto b) {
-                        breaks.push_back(Break{b, self.per });
-                    });
-              });
+          if (rec.sslp == 0) {
+            return std::move(rec.breaks);
+          } else if (rec.breaks.empty()) {
+            return std::vector<Break>{Break(rec.zero(term(0)), self.per)};
+          } else {
+            auto p_min = *(iter::array(rec.breaks) 
+              | iter::map([](auto b) -> Numeral { return b->p; })
+              | iter::min);
+            auto breaks = std::vector<Break>();
+            for ( auto b0p_pZ : rec.breaks ) {
+              auto b0p = b0p_pZ.t;
+              auto p   = b0p_pZ.p;
+              intersectGrid(b0p_pZ, 
+                            Bound::Closed, b0p, self.per, Bound::Open) 
+                | iter::foreach([&](auto b0) {
+                    intersectGrid(Break(rec.zero(b0), 1/abs(rec.sslp)), 
+                                  Bound::Closed, b0, p_min, Bound::Open)
+                      | iter::foreach([&](auto b) {
+                          breaks.push_back(Break(b, self.per));
+                      });
+                });
+            }
+            breaks.insert(breaks.end(), rec.breaks.begin(), rec.breaks.end());
+            return breaks;
           }
-          breaks.insert(breaks.end(), rec.breaks.begin(), rec.breaks.end());
-          return breaks;
-        }
         }
         );
     }
@@ -1512,135 +1521,6 @@ namespace viras {
         VIRAS_ASSERT((res.per == 0) == (res.breaks.size() == 0));
         return res;
     }
-
-//     LiraTerm analyse(Term self, Var x) {
-//       auto res = matchTerm(self,
-//         /* var v */ [&](auto y) { 
-//         return LiraTerm {
-//           .self = self,
-//           .x = x,
-//           .lim = self,
-//           .sslp = numeral(y == x ? 1 : 0),
-//           .oslp = numeral(y == x ? 1 : 0),
-//           .per = numeral(0),
-//           .deltaY = numeral(0),
-//           .distYminus = y == x ? term(0) 
-//                                : term(y),
-//           .breaks = std::vector<Break>(),
-//         }; }, 
-//
-//         /* numeral 1 */ [&]() { return LiraTerm {
-//           .self = self,
-//           .x = x,
-//           .lim = self,
-//           .sslp = numeral(0),
-//           .oslp = numeral(0),
-//           .per = numeral(0),
-//           .deltaY = numeral(0),
-//           .distYminus = term(numeral(1)),
-//           .breaks = std::vector<Break>(),
-//         }; }, 
-//         /* k * t */ [&](auto k, auto t) { 
-//           auto rec = analyse(t, x);
-//           return LiraTerm {
-//             .self = self,
-//             .x = x,
-//             .lim = rec.per == 0 ? self : k * rec.lim,
-//             .sslp = k * rec.sslp,
-//             .oslp = k * rec.oslp,
-//             .per = rec.per,
-//             .deltaY = abs(k) * rec.deltaY,
-//             .distYminus = k >= 0 ? k * rec.distYminus
-//                                  : k * rec.distYplus(),
-//             .breaks = std::move(rec.breaks),
-//           }; 
-//         }, 
-//
-//         /* l + r */ [&](auto l, auto r) { 
-//           auto rec_l = analyse(l, x);
-//           auto rec_r = analyse(r, x);
-//           auto per = rec_l.per == 0 ? rec_r.per
-//                  : rec_r.per == 0 ? rec_l.per
-//                  : lcm(rec_l.per, rec_r.per);
-//           auto breaks = std::move(rec_l.breaks);
-//           breaks.insert(breaks.end(), rec_r.breaks.begin(), rec_r.breaks.end());
-//           return LiraTerm {
-//             .self = self,
-//             .x = x,
-//             .lim = per == 0 ? self : rec_l.lim + rec_r.lim,
-//             .sslp = rec_l.sslp + rec_r.sslp,
-//             .oslp = rec_l.oslp + rec_r.oslp,
-//             .per = per,
-//             .deltaY = rec_l.deltaY + rec_r.deltaY,
-//             .distYminus = rec_l.distYminus + rec_r.distYminus,
-//             .breaks = std::move(breaks),
-//           }; 
-//         }, 
-//
-//         /* floor t */ [&](auto t) { 
-//           auto rec = analyse(t, x);
-//           auto per = rec.per == 0 && rec.oslp == 0 ? numeral(0)
-//                    : rec.per == 0                  ? 1 / abs(rec.oslp)
-//                    : num(rec.per) * den(rec.oslp);
-//           
-//           auto out = LiraTerm {
-//             .self = self,
-//             .x = x,
-//             .lim = per == 0      ? self 
-//                  : rec.sslp >= 0 ? floor(rec.lim) 
-//                                  : ceil(rec.lim) - 1,
-//             .sslp = numeral(0),
-//             .oslp = rec.oslp,
-//             .per = per,
-//             .deltaY = optimizeBounds 
-//               ? (rec.per == 0 ? numeral(0) : rec.deltaY + 1)
-//               :                              rec.deltaY + 1 ,
-//             .distYminus = optimizeBounds 
-//               ? (rec.per == 0 ? rec.distYminus : rec.distYminus - 1)
-//               :                                  rec.distYminus - 1 ,
-//             .breaks = std::vector<Break>(),
-//           }; 
-//           if (rec.sslp == 0) {
-//             out.breaks = std::move(rec.breaks);
-//           } else if (rec.breaks.empty()) {
-//             out.breaks.push_back(Break {rec.zero(term(0)), out.per});
-//           } else {
-//             auto p_min = *(iter::array(out.breaks) 
-//               | iter::map([](auto b) -> Numeral { return b->p; })
-//               | iter::min);
-//             for ( auto b0p_pZ : rec.breaks ) {
-//               auto b0p = b0p_pZ.t;
-//               auto p   = b0p_pZ.p;
-//               intersectGrid(b0p_pZ, 
-//                             Bound::Closed, b0p, out.per, Bound::Open) 
-//                 | iter::foreach([&](auto b0) {
-//                     intersectGrid(Break{rec.zero(b0), 1/rec.sslp}, 
-//                                   Bound::Closed, b0, p_min, Bound::Open)
-//                       | iter::foreach([&](auto b) {
-//                           out.breaks.push_back(Break{b, out.per });
-//                       });
-//                 });
-//             }
-//             out.breaks.insert(out.breaks.end(), rec.breaks.begin(), rec.breaks.end());
-//           }
-//           return out;
-//         }
-//         );
-// #define DEBUG_FIELD(field)                                                             \
-//         DBG("analyse(", res.self, ")." #field " = ", res.field)
-//         // DEBUG_FIELD(breaks.size())
-//         // iter::array(res.breaks) | iter::dbg("break") | iter::foreach([](auto...){});
-//         // DBG("")
-//         // DEBUG_FIELD(per)
-//         // DEBUG_FIELD(deltaY)
-//         // DBG("")
-//
-//         if (optimizeBounds) {
-//           VIRAS_ASSERT(res.per != 0 || res.deltaY == 0);
-//         }
-//         VIRAS_ASSERT((res.per == 0) == (res.breaks.size() == 0));
-//         return res;
-//     };
 
     LiraLiteral analyse(Literal self, Var x) 
     { return LiraLiteral { analyse(self.term(), x), self.symbol() }; }
@@ -1807,7 +1687,7 @@ namespace viras {
                                            | iter::map([&](auto* b) { return VT(t.zero(b->t)); }))
 
                                 else____(iter::array(t.breaks) 
-                                           | iter::flat_map([&](auto* b) { return intersectGrid(Break { .t=t.zero(b->t), .p=(1 - t.oslp / t.sslp) },
+                                           | iter::flat_map([&](auto* b) { return intersectGrid(Break(t.zero(b->t), 1 - t.oslp / t.sslp),
                                                                                                 Bound::Open, t.distXminus(), t.deltaX(), Bound::Open); })
                                            | iter::map([&](auto t) { return VT(t); }))
                                          
@@ -1829,9 +1709,9 @@ namespace viras {
                                  ; };
 
                        auto ebound_minus = [&]() { return 
-                           iter::if_then_(lit.lim_neg_inf(), iter::vals<VT>(t.distXplus(), -infty))
-                                 else____(                   iter::vals<VT>(t.distXplus()        ))
-                                 | iter::dbg("ebound_plus")
+                           iter::if_then_(lit.lim_neg_inf(), iter::vals<VT>(t.distXminus(), -infty))
+                                 else____(                   iter::vals<VT>(t.distXminus()        ))
+                                 | iter::dbg("ebound_minus")
                        ; };
 
                        return iter::if_then_(t.periodic(), iter::concat(ebreak(), eseg()))
@@ -1918,7 +1798,7 @@ namespace viras {
                                              | iter::fold([](auto l, auto r) { return lcm(l, r); }));
 
                               auto iGrid = [this, vt](auto... args) { 
-                              return intersectGrid(Break { *vt.term, *vt.period, }, args...)
+                              return intersectGrid(Break(*vt.term, *vt.period), args...)
                                                   | iter::map([](auto x) { return VirtualTerm(x); });
                               ; };
                               auto all_lim_top = [A](Infty inf) { return A() | iter::all([inf](auto l) { return l->lim(inf) == true; }); };
@@ -1941,13 +1821,7 @@ namespace viras {
                                       else____(
                                             A()
                                           | iter::filter([&](auto L) { return L->lim(-infty) == false; })
-                                          | iter::flat_map([lambda, iGrid](auto L) {
-                                                DBGE(*L)
-                                                DBGE(L->term.distXminus())
-                                                DBGE(L->term.deltaX())
-                                                DBGE(lambda)
-                                                return iGrid(Bound::Closed, L->term.distXminus(), L->term.deltaX() + lambda, Bound::Closed);
-                                            })
+                                          | iter::flat_map([lambda, iGrid](auto L) { return iGrid(Bound::Closed, L->term.distXminus(), L->term.deltaX() + lambda, Bound::Closed); })
                                           )
                                          | iter::dbg("fin");
                               return std::move(fin) 

@@ -1,5 +1,6 @@
 #pragma once
 #include "viras.h"
+#include <regex>
 
 namespace viras {
 
@@ -55,7 +56,6 @@ struct VirasTest : Viras<Config> {
     std::optional<std::string> check(std::vector<VirtualTerm> const& result) {
       for (auto& s : arrayIter(expected)) {
         if (!arrayIter(result).any([&](auto& res) { return res == s; }) ) {
-        // if (!arrayIter(result).any([&](auto& res) { return eqModAC(res, s); }) ) {
           return string(outputToString("not found: ", s));
         }
       }
@@ -86,79 +86,93 @@ struct VirasTest : Viras<Config> {
     ExpectedCheck expected;
 
     template<class C>
-    void run(Viras<C>& viras)
+    std::optional<std::string> run(Viras<C>& viras)
     {
       auto analysed = iter::array(conj) 
         | iter::map([&](auto l) { return viras.analyse(*l, x); })
         | iter::collect_vec;
       auto result = viras.elim_set(x, analysed) | iter::collect_vec;
-      auto simpl = SimplifyingConfig<C>(viras._config);
-      // auto simplResult = iter::array(result)
-      //       | iter::map([&](auto t) { return simpl.simpl(t); })
-      //       | iter::collect_vec;
       auto error = expected.check(result);
       if (error) {
-        std::cout << "[     FAIL ] " << conj << std::endl;
-        std::cout << "[   result ] " << result << std::endl;
-        std::cout << "[    error ] " << *error << std::endl;
-        std::cout << "[ expected ] " <<    expected << std::endl;
+        return std::optional<std::string>(
+            std::string(outputToString(
+                     "[    input ] ", conj, "\n",
+                     "[   result ] ", result, "\n",
+                     "[    error ] ", *error, "\n",
+                     "[ expected ] ",    expected, "\n"
+                ))
+            );
       } else {
-        std::cout << "[     OK   ] " << conj << std::endl;
-
+        return std::optional<std::string>();
       }
-      assert(!error);
-      // if (error) {
-      //     std::cout << "[         case ] " << pretty(     conj ) << std::endl;
-      //     std::cout << "[       result ] " << pretty(      result ) << std::endl;
-      //     // std::cout << "[ simpl result ] " << pretty( simplResult ) << std::endl;
-      //     std::cout << "[        error ] " << pretty(      *error ) << std::endl;
-      //     std::cout << "[     expected ] " << pretty(    expected ) << std::endl;
-      //     exit(-1);
-      // }
     }
   };
 
 
   struct TermAnalysisTest {
-    using TestFun = std::function<void(Term, LiraTerm&)>;
+    using TestFun = std::function<std::optional<std::string>(Term, LiraTerm&)>;
     Var x;
     Term term;
     std::vector<TestFun> expected;
 
     template<class C>
-    void run(Viras<C>& viras)
+    std::optional<std::string> run(Viras<C>& viras)
     {
       auto result = viras.analyse(term, x);
       for (auto& c : expected) {
-        c(term, result);
+        auto res = c(term, result);
+        if (res) {
+          return res;
+        }
       }
+      return std::optional<std::string>();
     }
   };
 
   using Test = std::variant<ElimSetTest, TermAnalysisTest>;
 
-template<class... Ts>
-struct overloaded : Ts... { using Ts::operator()...; };
-
-template<class... Ts>
-overloaded(Ts...) -> overloaded<Ts...>;
-
-  void run_tests(){
-    for (auto [name, test] : tests()) {
-      std::visit([&](auto& test) { test.run(*this); }, test);
-      // std::cout << "[ TEST ] " << name;
+  bool run_test(std::pair<std::string, Test>& testCase) {
+    auto& [name, test] = testCase;
+    auto err = std::visit([&](auto& t) { return t.run(*this); }, test);
+    if (err) {
+      std::cout << "[ FAIL ] " << name << std::endl;
+      std::cout << *err << std::endl;
+      return false;
+    } else {
+      std::cout << "[  OK  ] " << name << std::endl;
+      return true;
     }
   }
 
-  // template<class A, class... As>
-  // static std::vector<Literal> conj(A a, As... as) {
-  //
-  //   return std::vector<Literal>();
-  // }
-  //
-  // static std::vector<Literal> conj() {
-  //   return std::vector<Literal>();
-  // }
+  void run_tests(std::regex regex) {
+    for (auto& testCase : tests()) {
+      if (std::regex_match(testCase.first, regex)) {
+        run_test(testCase);
+      }
+    }
+  }
+
+  auto run_tests(const char* regex) { return run_tests(std::basic_regex(regex)); }
+  auto run_test (const char* test)  { return run_test(std::string(test)); }
+
+  void run_test(std::string const& name){
+    for (auto& testCase : tests()) {
+      if (testCase.first == name) {
+        run_test(testCase);
+      }
+    }
+  }
+
+
+  void auto_test(){
+    if (std::getenv("VIRAS_TEST_NAME")) {
+      run_test(std::getenv("VIRAS_TEST_NAME"));
+    } else if (std::getenv("VIRAS_TEST_PATTERN")) {
+      run_tests(std::getenv("VIRAS_TEST_PATTERN"));
+    } else {
+      run_tests(".*");
+    }
+  }
 
   template<class... As>
   auto breakSet(As... as)
@@ -179,13 +193,6 @@ overloaded(Ts...) -> overloaded<Ts...>;
     auto c = term(this->test_var("c"));
     auto frac = [&](auto l, auto r) { return numeral(l) / r; };
 
-    // auto conj = [](auto... args) { 
-    //   std::vector<Literal> out;
-    //   (out.push_back(args)...);
-    //   return out;
-    // };
-
-
 #define DEF_TEST(name, ...)                                                               \
     {                                                                                     \
       auto test = __VA_ARGS__;                                                            \
@@ -194,18 +201,18 @@ overloaded(Ts...) -> overloaded<Ts...>;
     }                                                                                     \
 
 #define TEST_EQ(lhs, rhs)                                                                 \
-  [&](auto input, LiraTerm& result) {                                                     \
-    ASS(lhs == rhs)                                                                       \
+  [=](auto input, LiraTerm& result) -> std::optional<std::string> {                       \
+    if(lhs == rhs)  {                                                                     \
+      return std::optional<std::string>();                                                \
+    } else {                                                                              \
+      return std::string(outputToString(                                                  \
+                      "[    input ] ", input, "\n",                                       \
+                      "[    query ] ", #lhs, "\n",                                        \
+                      "[    value ] ", lhs, "\n",                                         \
+                      "[ expected ] ", rhs, "\n"                                          \
+                ));                                                                       \
+    }                                                                                     \
   }
-
-  //   if (lhs != rhs) {                                             
-  //     std::cout << "[         case ] " << pretty(      input ) << std::endl;              
-  //     std::cout << "[       result ] " << pretty(     result ) << std::endl;              
-  //     std::cout << "[        check ] " << #lhs << " == " << pretty( rhs ) << std::endl;   
-  //     std::cout << "[       result ] " << pretty( lhs ) << std::endl; 
-  //     exit(-1);                                                                           
-  //   }                                                                                     
-  // }                                                                                       
 
 
     DEF_TEST(lra_01, 
@@ -264,8 +271,17 @@ overloaded(Ts...) -> overloaded<Ts...>;
 
     DEF_TEST(floor_3, 
         ElimSetTest {
-          .conj = { eq(floor(x - frac(1,2)), x) },
-          .expected = containsAll( frac(1,2) + Z(1) ), 
+          .conj = { eq(floor(x - a), x) },
+          .expected = containsAll( a + Z(1) ), 
+        })
+
+    DEF_TEST(floor_3_props, 
+        TermAnalysisTest {
+          .term =  floor(x + a),
+          .expected = allPass( TEST_EQ(result.per   , 1)
+                             , TEST_EQ(result.deltaY, 1)
+                             , TEST_EQ(result.breaks,  breakSet( -a + Z(1)))
+                             )
         })
 
     DEF_TEST(floor_4, 
@@ -284,71 +300,62 @@ overloaded(Ts...) -> overloaded<Ts...>;
         ElimSetTest {
           .conj = { 
             floor( x ) - 1 >= 0
-          // , x - 2 * floor(frac(1,2) * x) - b > 0
-          // , floor(3 * x - c) + floor(-3 * x + c) == 0
           },
           .expected = containsAll( term(1) ), 
         })
 
+    DEF_TEST(motivating_test_prop,
+        TermAnalysisTest {
+          .term =  floor(x) - 1,
+          .expected = allPass( TEST_EQ(result.per   , 1)
+                             , TEST_EQ(result.distYminus, term(-2))
+                             , TEST_EQ(result.deltaY    ,  1)
+                             , TEST_EQ(result.breaks,  breakSet( term(0) + Z(1)))
+                             )
+        })
+
+    DEF_TEST(motivating_test_prop,
+        TermAnalysisTest {
+          .term =  floor(x),
+          .expected = allPass( TEST_EQ(result.per       , 1)
+                             , TEST_EQ(result.distYminus, term(-1))
+                             , TEST_EQ(result.deltaY    , 1)
+                             , TEST_EQ(result.breaks,  breakSet( term(0) + Z(1)))
+                             )
+        })
+
+    DEF_TEST(motivating_test_prop,
+        TermAnalysisTest {
+          .term =  x,
+          .expected = allPass( TEST_EQ(result.per       , 0)
+                             , TEST_EQ(result.distYminus, term(0))
+                             , TEST_EQ(result.deltaY    , 0)
+                             )
+        })
+
     DEF_TEST(motivating_test_3,
         ElimSetTest {
-          .conj = { 
-            floor( x ) - 1 > 0
-          // , x - 2 * floor(frac(1,2) * x) - b > 0
-          // , floor(3 * x - c) + floor(-3 * x + c) == 0
-          },
+          .conj = { floor( x ) - 1 > 0 },
           .expected = containsAll( term(2) ), 
         })
 
     DEF_TEST(motivating_test_4,
         ElimSetTest {
-          .conj = { 
-            -floor( -x ) - 1 > 0
-          // , x - 2 * floor(frac(1,2) * x) - b > 0
-          },
+          .conj = { -floor( -x ) - 1 > 0 },
           .expected = containsAll( numeral(1) + epsilon ), 
         })
 
     DEF_TEST(motivating_test_5,
         ElimSetTest {
-          .conj = { 
-            eq(-floor( -x ) - 1, 0)
-          // , x - 2 * floor(frac(1,2) * x) - b > 0
-          },
+          .conj = { eq(-floor( -x ) - 1, 0) },
           .expected = containsAll( numeral(1) ), 
         })
 
     DEF_TEST(motivating_test_2,
         ElimSetTest {
-          .conj = { 
-            floor( x ) - a >= 0
-          // , x - 2 * floor(frac(1,2) * x) - b > 0
-          },
-          .expected = containsAll( -floor(-a),  -floor(-a) + epsilon ), 
+          .conj = { floor( x ) - a >= 0 },
+          .expected = containsAll( a /* if a is integral */ ,  floor(a) + 1 /* == ceil(a) if a is not integral */), 
         })
-
-     
-      // - k: -1
-      //   d: 1
-      //   floors: 
-      //   - { k: 1, l:  1, d: 0 }
-      //   # - { k: 1, l: -1, d: 0 }
-      //   color: blue
-      //   relation: Geq
-      //
-      //
-      // - k: 1
-      //   d: 3
-      //   floors: 
-      //   color: red
-      //   relation: Geq
-      //
-      //
-      // - k: -2
-      //   d: 3
-      //   floors: 
-      //   color: orange
-      //   relation: Eq
 
     DEF_TEST(some_props, 
         TermAnalysisTest {
@@ -360,26 +367,46 @@ overloaded(Ts...) -> overloaded<Ts...>;
                              , TEST_EQ(result.distXminus(), frac(1,2) * (a - 1)  )
                              , TEST_EQ(result.deltaX(), frac(1,2)  )
                              )
-          // .expected = allPass(TEST_EQ(result.lim, -x + floor(x) + 1))
         })
 
     DEF_TEST(some_props_2, 
         TermAnalysisTest {
           .term = floor(2 * (-floor(-3 * x + a) - x) - b),
           .expected = allPass( 
-                               TEST_EQ(result.breaks,  breakSet( frac(1,3) * a + Z(1,3)))
-                             , TEST_EQ(result.per,     frac(1,3))
+                               TEST_EQ(result.breaks,  breakSet( frac(1,3) * a + Z(1,3), -frac(1,2) * b + Z(1,2)
+                                    ))
+                             , TEST_EQ(result.per,     frac(1,1))
                              )
-          // .expected = allPass(TEST_EQ(result.lim, -x + floor(x) + 1))
         })
 
+    DEF_TEST(deep_breaks_1, 
+        TermAnalysisTest {
+          .term = floor(frac(1,2) * floor(x) + x),
+          .expected = allPass( 
+                               TEST_EQ(result.breaks,  breakSet( term(0) + Z(2)
+                                                               , frac(3,2) + Z(2)
+                                                               , term(0) + Z(1))) // TODO 0 + 1Z subset 0 + 2Z
+                             , TEST_EQ(result.per,     numeral(2))
+                             )
+        })
+
+    DEF_TEST(deep_breaks_2, 
+        TermAnalysisTest {
+          .term = floor(frac(1,2) * floor(x) + x - a),
+          .expected = allPass( 
+                               TEST_EQ(result.breaks,  breakSet(  // this was checked by manually verifying plots for different a
+                                                          a + -1 * floor(a) + Z(2)
+                                                        , a + frac(3,2) + -1 * floor(a + frac(1,2)) + Z(2)
+                                                        , term(0) + Z(1) ))
+                             , TEST_EQ(result.per,     numeral(2))
+                             )
+        })
 
     DEF_TEST(motivating_props_1, 
         TermAnalysisTest {
           .term = -x  - floor(-x),
           .expected = allPass(TEST_EQ(result.lim, -x + floor(x) + 1))
         })
-
 
     DEF_TEST(motivating, 
         ElimSetTest {
@@ -388,28 +415,9 @@ overloaded(Ts...) -> overloaded<Ts...>;
           ,  x >= floor(a) + frac(1,3)
           , -x >= floor(a) + frac(2,3)
           },
-          .expected = containsAll( a + Z(1) ), 
+          .expected = containsAll( numeral(0) + Z(1), floor(a) + frac(1,3), -infty ), 
         })
 
-
-    // DEF_TEST(motivating, 
-    //     ElimSetTest {
-    //       .conj = { 
-    //          floor( x ) - a >= 0
-    //       ,  -x     >= 0
-    //       , x - 2 * floor(frac(1,2) * x) - 1 > 0
-    //       },
-    //       .expected = containsAll( a + Z(1) ), 
-    //     })
-
-    // DEF_TEST(motivating, 
-    //     ElimSetTest {
-    //       .conj = { 
-    //         floor( x ) - a >= 0
-    //       , x - 2 * floor(frac(1,2) * x) - b > 0
-    //       },
-    //       .expected = containsAll( a + Z(1) ), 
-    //     })
 
     //////////////////////////////////////////////////////////////////////////////////////
     // term property tests
@@ -462,8 +470,6 @@ overloaded(Ts...) -> overloaded<Ts...>;
         TermAnalysisTest {
           .term     = floor(x),
           .expected =  allPass(
-                // TEST_EQ(result.distYminus, term(-1))
-              // , TEST_EQ(result.oslp, numeral(1))
                 TEST_EQ(result.distXminus(), term(0))
               , TEST_EQ(result.deltaX(), numeral(1))
               ),
@@ -474,8 +480,6 @@ overloaded(Ts...) -> overloaded<Ts...>;
         TermAnalysisTest {
           .term     = 2 * floor(x),
           .expected =  allPass(
-                // TEST_EQ(result.distYminus, term(-1))
-              // , TEST_EQ(result.oslp, numeral(1))
                 TEST_EQ(result.distXminus(), term(0))
               , TEST_EQ(result.deltaX(), numeral(1))
               ),
@@ -485,8 +489,6 @@ overloaded(Ts...) -> overloaded<Ts...>;
         TermAnalysisTest {
           .term     = frac(1,2) * floor(x),
           .expected =  allPass(
-                // TEST_EQ(result.distYminus, term(-1))
-              // , TEST_EQ(result.oslp, numeral(1))
                 TEST_EQ(result.distXminus(), term(0))
               , TEST_EQ(result.deltaX(), numeral(1))
               ),
