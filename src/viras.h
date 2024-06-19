@@ -303,7 +303,6 @@ namespace viras {
       { return out << self.self; }
     };
 
-
     struct Infty {
       bool positive;
       Infty operator-() const 
