@@ -234,7 +234,6 @@ namespace viras {
   { return SimplifyingConfig<Config>(std::move(c)); }
 
   using namespace sugar;
-  using namespace data;
 
   template<class Config
     , bool optimizeBounds = true
@@ -250,12 +249,12 @@ namespace viras {
     using Literals = sugar::Literals<Config>;
     using Literal  = sugar::Literal<Config>;
     using Var      = sugar::Var<Config>;
-    using Break    = data::Break<Config>;
-    using Epsilon = data::Epsilon;
-    using VirtualTerm = data::VirtualTerm<Config>;
-    using Infty = data::Infty;
-    using ZComp = data::ZComp<Config>;
-    using LiraTerm = data::LiraTerm<Config>;
+    using Break    = viras::Break<Config>;
+    using Epsilon = viras::Epsilon;
+    using VirtualTerm = viras::VirtualTerm<Config>;
+    using Infty = viras::Infty;
+    using ZComp = viras::ZComp<Config>;
+    using LiraTerm = viras::LiraTerm<Config>;
 
     Config _config;
   public:

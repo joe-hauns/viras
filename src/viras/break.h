@@ -3,7 +3,6 @@
 #include "viras/iter.h"
 
 namespace viras {
-namespace data {
 
   template<class C>
   struct Break {
@@ -23,12 +22,12 @@ namespace data {
   };
 
   template<class C>
-  sugar::Term<C> grid_ceil (sugar::Term<C> t, data::Break<C> s_pZ) { return t + rem(s_pZ.t - t, s_pZ.p); }
+  sugar::Term<C> grid_ceil (sugar::Term<C> t, Break<C> s_pZ) { return t + rem(s_pZ.t - t, s_pZ.p); }
   template<class C>
-  sugar::Term<C> grid_floor(sugar::Term<C> t, data::Break<C> s_pZ) { return t - rem(t - s_pZ.t, s_pZ.p); }
+  sugar::Term<C> grid_floor(sugar::Term<C> t, Break<C> s_pZ) { return t - rem(t - s_pZ.t, s_pZ.p); }
 
   template<class C>
-  auto intersectGrid(data::Break<C> s_pZ, Bound l, sugar::Term<C> t, sugar::Numeral<C> k, Bound r) {
+  auto intersectGrid(Break<C> s_pZ, Bound l, sugar::Term<C> t, sugar::Numeral<C> k, Bound r) {
     using namespace sugar;
     auto p = s_pZ.p;
     auto start = [&]() {
@@ -51,10 +50,6 @@ namespace data {
                               }));
                  
   }
-
-
-} // namespace data
-
 
 
 } // namespace viras

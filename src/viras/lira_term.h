@@ -9,14 +9,13 @@
 #include "viras/break.h"
 
 namespace viras {
-namespace data {
 
   template<class C>
   struct LiraTerm {
     using Term = sugar::Term<C>;
     using Var = sugar::Var<C>;
     using Numeral = sugar::Numeral<C>;
-    using Break = data::Break<C>;
+    using Break = viras::Break<C>;
 
     Term self;
     Var x;
@@ -301,5 +300,4 @@ namespace data {
   };
 
 
-} // namespace data
 } // namespace viras

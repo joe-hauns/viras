@@ -4,7 +4,6 @@
 #include "viras/break.h"
 
 namespace viras {
-namespace data {
     
   struct Epsilon {
     friend std::ostream& operator<<(std::ostream& out, Epsilon const& self)
@@ -79,8 +78,8 @@ namespace data {
     { 
       bool fst = true;
 #define __OUTPUT(field)                                                                   \
-      if (fst) { out << field; fst = false; }                                           \
-      else { out << " + " << field; }                                                   \
+      if (fst) { out << field; fst = false; }                                             \
+      else { out << " + " << field; }                                                     \
 
       if (self.term) { __OUTPUT(*self.term) }
       if (self.epsilon) { __OUTPUT(*self.epsilon) }
@@ -96,60 +95,48 @@ namespace data {
     DERIVE_TUPLE_LESS
   };
 
-  template<class C>
-  VirtualTerm<C> operator+(sugar::Term<C> const& t, Epsilon const& e)
-  { return VirtualTerm<C>(t) + e; }
+  namespace sugar {
+    template<class C>
+    VirtualTerm<C> operator+(VirtualTerm<C> const& t, Epsilon const& e)
+    { 
+      VirtualTerm<C> out = t;
+      out.epsilon = std::optional<Epsilon>(e);
+      return out; 
+    }
 
-  template<class C>
-  VirtualTerm<C> operator+(VirtualTerm<C> const& t, Epsilon const& e)
-  { 
-    VirtualTerm<C> out = t;
-    out.epsilon = std::optional<Epsilon>(e);
-    return out; 
-  }
+    template<class C>
+    VirtualTerm<C> operator+(VirtualTerm<C> const& t, ZComp<C> const& z) 
+    { 
+      VirtualTerm<C> out = t;
+      out.period = std::optional<sugar::Numeral<C>>(z.period);
+      return out; 
+    }
 
-  template<class C>
-  VirtualTerm<C> operator+(sugar::Numeral<C> const& t, Epsilon const& e) 
-  { return sugar::to_term(t) + e; }
+    template<class C>
+    VirtualTerm<C> operator+(VirtualTerm<C> const& t, Infty const& i) 
+    { 
+      VirtualTerm<C> out = t;
+      out.infty = std::optional<Infty>(i);
+      return out; 
+    }
 
+#define LIFT_VIRTUAL_TERM_PLUS(Type)                                                      \
+    template<class C>                                                                     \
+    VirtualTerm<C> operator+(sugar::Term<C> const& t, Type const& x)                      \
+    { return VirtualTerm<C>(t) + x; }                                                     \
+                                                                                          \
+    template<class C>                                                                     \
+    VirtualTerm<C> operator+(sugar::Numeral<C> const& t, Type const& x)                   \
+    { return sugar::to_term(t) + x; }                                                     \
 
-  template<class C>
-  VirtualTerm<C> operator+(sugar::Term<C> const& t, ZComp<C> const& z) 
-  { return VirtualTerm<C>(t) + z; }
+    LIFT_VIRTUAL_TERM_PLUS(Epsilon);
+    LIFT_VIRTUAL_TERM_PLUS(ZComp<C>);
+    LIFT_VIRTUAL_TERM_PLUS(Infty);
 
-  template<class C>
-  VirtualTerm<C> operator+(sugar::Numeral<C> const& t, ZComp<C> const& z) 
-  { return sugar::to_term(t) + z; }
+    template<class C>
+    VirtualTerm<C> operator+(int t, ZComp<C> const& z) 
+    { return sugar::to_numeral(z.period.config, t) + z; }
 
-  template<class C>
-  VirtualTerm<C> operator+(int t, ZComp<C> const& z) 
-  { return sugar::to_numeral(z.period.config, t) + z; }
+  } // namespace sugar
 
-  template<class C>
-  VirtualTerm<C> operator+(VirtualTerm<C> const& t, ZComp<C> const& z) 
-  { 
-    VirtualTerm<C> out = t;
-    out.period = std::optional<sugar::Numeral<C>>(z.period);
-    return out; 
-  }
-
-  template<class C>
-  VirtualTerm<C> operator+(sugar::Term<C> const& t, Infty const& i) 
-  { return VirtualTerm<C>(t) + i; }
-
-  template<class C>
-  VirtualTerm<C> operator+(VirtualTerm<C> const& t, Infty const& i) 
-  { 
-    VirtualTerm<C> out = t;
-    out.infty = std::optional<Infty>(i);
-    return out; 
-  }
-
-  template<class C>
-  VirtualTerm<C> operator+(sugar::Numeral<C> const& t, Infty const& i) 
-  { return sugar::to_term(t) + i; }
-
-
-
-} // namespace data
 } // namespace viras
