@@ -4,32 +4,24 @@
 
 namespace viras {
 
-template<class Config>
-struct VirasTest : Viras<Config> {
+template<class C>
+struct VirasTest : Viras<C> {
 
   template<class... As>
-  VirasTest(As... as) : Viras<Config>(as...) {}
+  VirasTest(As... as) : Viras<C>(as...) {}
 
-  using VirtualTerm = typename Viras<Config>::VirtualTerm;
-  using Literal     = typename Viras<Config>::Literal;
-  using Literals    = typename Viras<Config>::Literals;
-  using Term        = typename Viras<Config>::Term;
-  using LiraTerm    = typename Viras<Config>::LiraTerm;
-  using Var         = typename Viras<Config>::Var;
-  using Numeral     = typename Viras<Config>::Numeral;
-  using Break       = typename Viras<Config>::Break;
-  using Viras<Config>::epsilon;
-  using Viras<Config>::Z;
-  using Viras<Config>::infty;
-  using Viras<Config>::term;
-  using Viras<Config>::numeral;
+  using Viras<C>::epsilon;
+  using Viras<C>::Z;
+  using Viras<C>::infty;
+  using Viras<C>::term;
+  using Viras<C>::numeral;
 
   public:
 
   struct AllContained {
-    std::vector<VirtualTerm> expected;
+    std::vector<VirtualTerm<C>> expected;
 
-    std::optional<std::string> check(std::vector<VirtualTerm> const& result) {
+    std::optional<std::string> check(std::vector<VirtualTerm<C>> const& result) {
       for (auto& s : arrayIter(expected)) {
         if (!arrayIter(result).any([&](auto& res) { return res == s; }) ) {
           return output_to_string("not found: ", s);
@@ -45,7 +37,7 @@ struct VirasTest : Viras<Config> {
   struct ExpectedCheck : std::variant<AllContained> 
   {
     using std::variant<AllContained>::variant;
-    std::optional<std::string> check(std::vector<VirtualTerm> const& result) 
+    std::optional<std::string> check(std::vector<VirtualTerm<C>> const& result) 
     { return std::visit([&](auto& x) { return x.check(result); }, *this); }
     friend std::ostream& operator<<(std::ostream& out, ExpectedCheck const& self)
     { std::visit([&](auto& self) { out << self; }, self); return out; }
@@ -53,15 +45,14 @@ struct VirasTest : Viras<Config> {
 
   template<class... As>
   ExpectedCheck containsAll(As... as)
-  { return ExpectedCheck(AllContained{std::vector<VirtualTerm>{VirtualTerm(as)...}}); }
+  { return ExpectedCheck(AllContained{std::vector<VirtualTerm<C>>{VirtualTerm<C>(as)...}}); }
 
 
   struct ElimSetTest {
-    Var x;
-    std::vector<Literal> conj;
+    Var<C> x;
+    std::vector<Literal<C>> conj;
     ExpectedCheck expected;
 
-    template<class C>
     std::optional<std::string> run(Viras<C>& viras)
     {
       auto analysed = iter::array(conj) 
@@ -86,12 +77,11 @@ struct VirasTest : Viras<Config> {
 
 
   struct TermAnalysisTest {
-    using TestFun = std::function<std::optional<std::string>(Term, LiraTerm&)>;
-    Var x;
-    Term term;
+    using TestFun = std::function<std::optional<std::string>(Term<C>, LiraTerm<C>&)>;
+    Var<C> x;
+    Term<C> term;
     std::vector<TestFun> expected;
 
-    template<class C>
     std::optional<std::string> run(Viras<C>& viras)
     {
       auto result = viras.analyse(term, x);
@@ -152,7 +142,7 @@ struct VirasTest : Viras<Config> {
 
   template<class... As>
   auto breakSet(As... as)
-  { return std::vector<Break> { Break{ *as.term, *as.period }... }; }
+  { return std::vector<Break<C>> { Break<C>{ *as.term, *as.period }... }; }
 
 
   template<class... Tests> 
@@ -177,7 +167,7 @@ struct VirasTest : Viras<Config> {
     }                                                                                     \
 
 #define TEST_EQ(lhs, rhs)                                                                 \
-  [=](auto input, LiraTerm& result) -> std::optional<std::string> {                       \
+  [=](auto input, LiraTerm<C>& result) -> std::optional<std::string> {                       \
     if(lhs == rhs)  {                                                                     \
       return std::optional<std::string>();                                                \
     } else {                                                                              \

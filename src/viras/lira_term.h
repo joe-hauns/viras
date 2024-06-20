@@ -8,46 +8,39 @@ namespace viras {
 
   template<class C>
   struct LiraTerm {
+    Term<C> self;
+    Var<C> x;
+    Term<C> lim;
+    Numeral<C> sslp;
+    Numeral<C> oslp;
+    Numeral<C> per;
+    Numeral<C> deltaY;
+    Term<C> distYminus;
+    Term<C> distYplus() { return distYminus + deltaY; }
+    std::vector<Break<C>> breaks;
 
-
-    using Term = viras::Term<C>;
-    using Var = viras::Var<C>;
-    using Numeral = viras::Numeral<C>;
-    using Break = viras::Break<C>;
-
-    Term self;
-    Var x;
-    Term lim;
-    Numeral sslp;
-    Numeral oslp;
-    Numeral per;
-    Numeral deltaY;
-    Term distYminus;
-    Term distYplus() { return distYminus + deltaY; }
-    std::vector<Break> breaks;
-
-    Term distXminus() const {
+    Term<C> distXminus() const {
       return -(1 / oslp) * (oslp > 0 ? distYminus + deltaY
                                      : distYminus         );
     }
 
-    Term distXplus() const { 
+    Term<C> distXplus() const { 
       return  -(1 / oslp) * (oslp > 0 ? distYminus
                                       : distYminus + deltaY);
 
     }
 
-    Numeral deltaX() const { return abs(1/oslp) * deltaY; }
-    Term lim_at(Term x0) const { return subs(lim, x, x0); }
-    Term dseg(Term x0) const { return -(sslp * x0) + lim_at(x0); }
-    Term zero(Term x0) const { return x0 - lim_at(x0) / sslp; }
+    Numeral<C> deltaX() const { return abs(1/oslp) * deltaY; }
+    Term<C> lim_at(Term<C> x0) const { return subs(lim, x, x0); }
+    Term<C> dseg(Term<C> x0) const { return -(sslp * x0) + lim_at(x0); }
+    Term<C> zero(Term<C> x0) const { return x0 - lim_at(x0) / sslp; }
     bool periodic() const { return oslp == 0; }
 
     friend std::ostream& operator<<(std::ostream& out, LiraTerm const& self)
     { return out << self.self; }
 
     template<class MatchRec>
-    static Term calcLim(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+    static Term<C> calcLim(LiraTerm const& self, Var<C> const& x, MatchRec matchRec) {
        return matchRec(
         /* var y */ [&](auto y) 
         { return self.self; },
@@ -70,7 +63,7 @@ namespace viras {
 
 
     template<class MatchRec>
-    static Numeral calcPer(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+    static Numeral<C> calcPer(LiraTerm const& self, Var<C> const& x, MatchRec matchRec) {
       auto to_numeral = [&](auto n) { return viras::to_numeral(self.self.config, n); };
        return matchRec(
         /* var y */ [&](auto y) 
@@ -95,7 +88,7 @@ namespace viras {
     }
 
     template<class MatchRec>
-    static Numeral calcSslp(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+    static Numeral<C> calcSslp(LiraTerm const& self, Var<C> const& x, MatchRec matchRec) {
       auto to_numeral = [&](auto n) { return viras::to_numeral(self.self.config, n); };
       return matchRec(
         /* var y */ [&](auto y) 
@@ -117,7 +110,7 @@ namespace viras {
 
 
     template<class MatchRec>
-    static Numeral calcOslp(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+    static Numeral<C> calcOslp(LiraTerm const& self, Var<C> const& x, MatchRec matchRec) {
       auto to_numeral = [&](auto n) { return viras::to_numeral(self.self.config, n); };
       return matchRec(
         /* var y */ [&](auto y) 
@@ -139,7 +132,7 @@ namespace viras {
 
 
     template<class MatchRec>
-    static Numeral calcDeltaY(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+    static Numeral<C> calcDeltaY(LiraTerm const& self, Var<C> const& x, MatchRec matchRec) {
       auto to_numeral = [&](auto n) { return viras::to_numeral(self.self.config, n); };
        return matchRec(
         /* var y */ [&](auto y) 
@@ -165,7 +158,7 @@ namespace viras {
 
 
     template<class MatchRec>
-    static Term calcDistYminus(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+    static Term<C> calcDistYminus(LiraTerm const& self, Var<C> const& x, MatchRec matchRec) {
       auto n_term = [&](auto n) { return viras::to_term(self.self.config, n); };
        return matchRec(
         /* var y */ [&](auto y) 
@@ -191,14 +184,14 @@ namespace viras {
 
 
     template<class MatchRec>
-    static std::vector<Break> calcBreaks(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+    static std::vector<Break<C>> calcBreaks(LiraTerm const& self, Var<C> const& x, MatchRec matchRec) {
       auto n_term = [&](auto n) { return viras::to_term(self.self.config, n); };
       return matchRec(
         /* var y */ [&](auto y) 
-        { return std::vector<Break>(); }
+        { return std::vector<Break<C>>(); }
 
         /* numeral 1 */ , [&]() 
-        { return std::vector<Break>(); }
+        { return std::vector<Break<C>>(); }
 
         /* k * t */ , [&](auto k, auto t, auto& rec) 
         { return std::move(rec.breaks); }
@@ -213,22 +206,22 @@ namespace viras {
           if (rec.sslp == 0) {
             return std::move(rec.breaks);
           } else if (rec.breaks.empty()) {
-            return std::vector<Break>{Break(rec.zero(n_term(0)), self.per)};
+            return std::vector<Break<C>>{Break<C>(rec.zero(n_term(0)), self.per)};
           } else {
             auto p_min = *(iter::array(rec.breaks) 
-              | iter::map([](auto b) -> Numeral { return b->p; })
+              | iter::map([](auto b) -> Numeral<C> { return b->p; })
               | iter::min);
-            auto breaks = std::vector<Break>();
+            auto breaks = std::vector<Break<C>>();
             for ( auto b0p_pZ : rec.breaks ) {
               auto b0p = b0p_pZ.t;
               auto p   = b0p_pZ.p;
               intersectGrid(b0p_pZ, 
                             Bound::Closed, b0p, self.per, Bound::Open) 
                 | iter::foreach([&](auto b0) {
-                    intersectGrid(Break(rec.zero(b0), 1/abs(rec.sslp)), 
+                    intersectGrid(Break<C>(rec.zero(b0), 1/abs(rec.sslp)), 
                                   Bound::Closed, b0, p_min, Bound::Open)
                       | iter::foreach([&](auto b) {
-                          breaks.push_back(Break(b, self.per));
+                          breaks.push_back(Break<C>(b, self.per));
                       });
                 });
             }
@@ -240,7 +233,7 @@ namespace viras {
     }
 
 
-    static LiraTerm analyse(Term self, Var x) {
+    static LiraTerm analyse(Term<C> self, Var<C> x) {
       LiraTerm rec0;
       LiraTerm rec1;
       matchTerm(self, 
