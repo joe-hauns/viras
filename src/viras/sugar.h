@@ -225,12 +225,20 @@ namespace sugar {
     Term<C> rem(Term<C> t, Numeral<C> p) { return t - p * quot(t, p); }
 
     template<class C>
+    Term<C> to_term(Var<C> n) 
+    { return Term<C> { n.config, n.config->term(n.inner), }; }
+
+    template<class C>
     Term<C> to_term(Numeral<C> n) 
     { return Term<C> { n.config, n.config->term(n.inner), }; }
 
     template<class C>
     Numeral<C> to_numeral(C* c, int n) 
     { return Numeral<C> { c, c->numeral(n), }; }
+
+    template<class C>
+    Term<C> to_term(C* c, int n) 
+    { return to_term(to_numeral(c,n)); }
 
 #define LIFT_NUMERAL_TO_TERM_L(fn)                                                        \
     template<class C>                                                                \
