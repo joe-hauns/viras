@@ -11,8 +11,6 @@
 #include "viras/lira_term.h"
 #include "viras/break.h"
 
-#include <map>
-#include <tuple>
 
 namespace viras {
 
