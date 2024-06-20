@@ -93,12 +93,17 @@ namespace term_engine {
 
 
 
-
     typename C::Term eval_term(int const& expr) 
     { return config->term(eval_numeral(expr)); }
 
+    typename C::Term eval_term(typename C::Var const& term) 
+    { return config->term(term); }
+
     typename C::Term eval_term(typename C::Term const& term) 
     { return term; }
+
+    typename C::Term eval_term(typename C::Numeral const& n) 
+    { return config->term(eval_numeral(n)); }
 
     typename C::Term eval_term(operators::Numeral const& n) 
     { return config->term(eval_numeral(n)); }
@@ -112,7 +117,7 @@ namespace term_engine {
     { return config->mul(eval_numeral(expr.lhs), eval_term(expr.rhs)); }
 
     typename C::Term eval_term(operators::TestVar expr) 
-    { return config->test_var(expr.name); }
+    { return config->term(config->test_var(expr.name)); }
 
 
 #define __EVAL_LITERAL(Ast, Sym) \
@@ -135,7 +140,7 @@ namespace term_engine {
 
 #define viras_eval_literal(config, expr) viras_eval(literal, config, expr)
 #define viras_eval_term(config, expr) viras_eval(term, config, expr)
-#define viras_eval_numeral(config, expr) viras_eval(term, config, expr)
+#define viras_eval_numeral(config, expr) viras_eval(numeral, config, expr)
 
 #define viras_eval(kind, config, expr) [&]() { \
       using namespace viras::term_engine::operators; \
