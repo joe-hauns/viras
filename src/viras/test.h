@@ -4,6 +4,7 @@
 
 namespace viras {
 
+  using namespace sugar;
 template<class Config>
 struct VirasTest : Viras<Config> {
 

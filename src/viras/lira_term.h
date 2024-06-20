@@ -1,20 +1,18 @@
 #pragma once
-#include "viras/sugar.h"
+#include "viras/base_types.h"
 #include "viras/virtual_term.h"
 #include "viras/iter.h"
-
-// TODO rename namespce data to viras
-// TODO move all operators to viras::sugar
-
 #include "viras/break.h"
 
 namespace viras {
 
   template<class C>
   struct LiraTerm {
-    using Term = sugar::Term<C>;
-    using Var = sugar::Var<C>;
-    using Numeral = sugar::Numeral<C>;
+
+
+    using Term = viras::Term<C>;
+    using Var = viras::Var<C>;
+    using Numeral = viras::Numeral<C>;
     using Break = viras::Break<C>;
 
     Term self;
@@ -27,27 +25,47 @@ namespace viras {
     Term distYminus;
     Term distYplus() { return distYminus + deltaY; }
     std::vector<Break> breaks;
+
     Term distXminus() const {
+      using namespace sugar;
       return -(1 / oslp) * (oslp > 0 ? distYminus + deltaY
                                      : distYminus         );
     }
+
     Term distXplus() const { 
       using namespace sugar;
       return  -(1 / oslp) * (oslp > 0 ? distYminus
                                       : distYminus + deltaY);
 
     }
-    Numeral deltaX() const { return abs(1/oslp) * deltaY; }
-    Term lim_at(Term x0) const { return subs(lim, x, x0); }
-    Term dseg(Term x0) const { return -(sslp * x0) + lim_at(x0); }
-    Term zero(Term x0) const { return x0 - lim_at(x0) / sslp; }
-    bool periodic() const { return oslp == 0; }
+
+    Numeral deltaX() const { 
+      using namespace sugar;
+      return abs(1/oslp) * deltaY; 
+    }
+    Term lim_at(Term x0) const { 
+      using namespace sugar;
+      return subs(lim, x, x0); 
+    }
+    Term dseg(Term x0) const { 
+      using namespace sugar;
+      return -(sslp * x0) + lim_at(x0); 
+    }
+    Term zero(Term x0) const { 
+      using namespace sugar;
+      return x0 - lim_at(x0) / sslp; 
+    }
+    bool periodic() const { 
+      using namespace sugar;
+      return oslp == 0; 
+    }
+
     friend std::ostream& operator<<(std::ostream& out, LiraTerm const& self)
     { return out << self.self; }
 
-
     template<class MatchRec>
     static Term calcLim(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+       using namespace sugar;
        return matchRec(
         /* var y */ [&](auto y) 
         { return self.self; },
@@ -71,7 +89,8 @@ namespace viras {
 
     template<class MatchRec>
     static Numeral calcPer(LiraTerm const& self, Var const& x, MatchRec matchRec) {
-      auto to_numeral = [&](auto n) { return sugar::to_numeral(self.self.config, n); };
+      using namespace sugar;
+      auto to_numeral = [&](auto n) { return viras::to_numeral(self.self.config, n); };
        return matchRec(
         /* var y */ [&](auto y) 
         { return to_numeral(0); },
@@ -96,7 +115,8 @@ namespace viras {
 
     template<class MatchRec>
     static Numeral calcSslp(LiraTerm const& self, Var const& x, MatchRec matchRec) {
-      auto to_numeral = [&](auto n) { return sugar::to_numeral(self.self.config, n); };
+      using namespace sugar;
+      auto to_numeral = [&](auto n) { return viras::to_numeral(self.self.config, n); };
       return matchRec(
         /* var y */ [&](auto y) 
         { return to_numeral(y == x ? 1 : 0); }
@@ -118,7 +138,8 @@ namespace viras {
 
     template<class MatchRec>
     static Numeral calcOslp(LiraTerm const& self, Var const& x, MatchRec matchRec) {
-      auto to_numeral = [&](auto n) { return sugar::to_numeral(self.self.config, n); };
+      using namespace sugar;
+      auto to_numeral = [&](auto n) { return viras::to_numeral(self.self.config, n); };
       return matchRec(
         /* var y */ [&](auto y) 
         { return to_numeral(y == x ? 1 : 0); }
@@ -140,7 +161,8 @@ namespace viras {
 
     template<class MatchRec>
     static Numeral calcDeltaY(LiraTerm const& self, Var const& x, MatchRec matchRec) {
-      auto to_numeral = [&](auto n) { return sugar::to_numeral(self.self.config, n); };
+      using namespace sugar;
+      auto to_numeral = [&](auto n) { return viras::to_numeral(self.self.config, n); };
        return matchRec(
         /* var y */ [&](auto y) 
         { return to_numeral(0); }
@@ -166,7 +188,8 @@ namespace viras {
 
     template<class MatchRec>
     static Term calcDistYminus(LiraTerm const& self, Var const& x, MatchRec matchRec) {
-      auto n_term = [&](auto n) { return sugar::to_term(self.self.config, n); };
+      using namespace sugar;
+      auto n_term = [&](auto n) { return viras::to_term(self.self.config, n); };
        return matchRec(
         /* var y */ [&](auto y) 
         { return y == x ? n_term(0) : to_term(y); }
@@ -190,54 +213,55 @@ namespace viras {
     }
 
 
-  template<class MatchRec>
-  static std::vector<Break> calcBreaks(LiraTerm const& self, Var const& x, MatchRec matchRec) {
-      auto n_term = [&](auto n) { return sugar::to_term(self.self.config, n); };
-     return matchRec(
-      /* var y */ [&](auto y) 
-      { return std::vector<Break>(); }
+    template<class MatchRec>
+    static std::vector<Break> calcBreaks(LiraTerm const& self, Var const& x, MatchRec matchRec) {
+      using namespace sugar;
+      auto n_term = [&](auto n) { return viras::to_term(self.self.config, n); };
+      return matchRec(
+        /* var y */ [&](auto y) 
+        { return std::vector<Break>(); }
 
-      /* numeral 1 */ , [&]() 
-      { return std::vector<Break>(); }
+        /* numeral 1 */ , [&]() 
+        { return std::vector<Break>(); }
 
-      /* k * t */ , [&](auto k, auto t, auto& rec) 
-      { return std::move(rec.breaks); }
+        /* k * t */ , [&](auto k, auto t, auto& rec) 
+        { return std::move(rec.breaks); }
 
-      /* l + r */ , [&](auto l, auto r, auto& rec_l, auto& rec_r)  {
-        auto breaks = std::move(rec_l.breaks);
-        breaks.insert(breaks.end(), rec_r.breaks.begin(), rec_r.breaks.end());
-        return breaks;
-      }
-
-      /* floor t */ , [&](auto t, auto& rec)  {
-        if (rec.sslp == 0) {
-          return std::move(rec.breaks);
-        } else if (rec.breaks.empty()) {
-          return std::vector<Break>{Break(rec.zero(n_term(0)), self.per)};
-        } else {
-          auto p_min = *(iter::array(rec.breaks) 
-            | iter::map([](auto b) -> Numeral { return b->p; })
-            | iter::min);
-          auto breaks = std::vector<Break>();
-          for ( auto b0p_pZ : rec.breaks ) {
-            auto b0p = b0p_pZ.t;
-            auto p   = b0p_pZ.p;
-            intersectGrid(b0p_pZ, 
-                          Bound::Closed, b0p, self.per, Bound::Open) 
-              | iter::foreach([&](auto b0) {
-                  intersectGrid(Break(rec.zero(b0), 1/abs(rec.sslp)), 
-                                Bound::Closed, b0, p_min, Bound::Open)
-                    | iter::foreach([&](auto b) {
-                        breaks.push_back(Break(b, self.per));
-                    });
-              });
-          }
-          breaks.insert(breaks.end(), rec.breaks.begin(), rec.breaks.end());
+        /* l + r */ , [&](auto l, auto r, auto& rec_l, auto& rec_r)  {
+          auto breaks = std::move(rec_l.breaks);
+          breaks.insert(breaks.end(), rec_r.breaks.begin(), rec_r.breaks.end());
           return breaks;
         }
-      }
+
+        /* floor t */ , [&](auto t, auto& rec)  {
+          if (rec.sslp == 0) {
+            return std::move(rec.breaks);
+          } else if (rec.breaks.empty()) {
+            return std::vector<Break>{Break(rec.zero(n_term(0)), self.per)};
+          } else {
+            auto p_min = *(iter::array(rec.breaks) 
+              | iter::map([](auto b) -> Numeral { return b->p; })
+              | iter::min);
+            auto breaks = std::vector<Break>();
+            for ( auto b0p_pZ : rec.breaks ) {
+              auto b0p = b0p_pZ.t;
+              auto p   = b0p_pZ.p;
+              intersectGrid(b0p_pZ, 
+                            Bound::Closed, b0p, self.per, Bound::Open) 
+                | iter::foreach([&](auto b0) {
+                    intersectGrid(Break(rec.zero(b0), 1/abs(rec.sslp)), 
+                                  Bound::Closed, b0, p_min, Bound::Open)
+                      | iter::foreach([&](auto b) {
+                          breaks.push_back(Break(b, self.per));
+                      });
+                });
+            }
+            breaks.insert(breaks.end(), rec.breaks.begin(), rec.breaks.end());
+            return breaks;
+          }
+        }
       );
-  }
+    }
 
 
     static LiraTerm analyse(Term self, Var x) {

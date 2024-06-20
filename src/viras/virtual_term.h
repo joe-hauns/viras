@@ -1,6 +1,6 @@
 #pragma once
 #include "viras/config_macros.h"
-#include "viras/sugar.h"
+#include "viras/base_types.h"
 #include "viras/break.h"
 
 namespace viras {
@@ -34,9 +34,9 @@ namespace viras {
 
   template<class C>
   struct ZComp {
-    sugar::Numeral<C> period;
+    Numeral<C> period;
 
-    explicit ZComp(sugar::Numeral<C> period) : period(period) {}
+    explicit ZComp(Numeral<C> period) : period(period) {}
 
     friend std::ostream& operator<<(std::ostream& out, ZComp const& self)
     { return out << self.period << "ℤ"; }
@@ -48,15 +48,15 @@ namespace viras {
 
   template<class C>
   struct VirtualTerm {
-    std::optional<sugar::Term<C>> term;
+    std::optional<Term<C>> term;
     std::optional<Epsilon> epsilon;
-    std::optional<sugar::Numeral<C>> period;
+    std::optional<Numeral<C>> period;
     std::optional<Infty> infty;
   public:
     VirtualTerm(
-      std::optional<sugar::Term<C>> term,
+      std::optional<Term<C>> term,
       std::optional<Epsilon> epsilon,
-      std::optional<sugar::Numeral<C>> period,
+      std::optional<Numeral<C>> period,
       std::optional<Infty> infinity) 
       : term(std::move(term))
       , epsilon(std::move(epsilon))
@@ -67,12 +67,12 @@ namespace viras {
       VIRAS_ASSERT(!infty || !period);
     }
 
-    VirtualTerm(sugar::Numeral<C> n) : VirtualTerm(to_term(n)) {}
+    VirtualTerm(Numeral<C> n) : VirtualTerm(to_term(n)) {}
     VirtualTerm(Break<C> t_pZ) : VirtualTerm(std::move(t_pZ.t), {}, std::move(t_pZ.p), {}) {}
     VirtualTerm(Infty infty) : VirtualTerm({}, {}, {}, infty) {}
-    VirtualTerm(sugar::Term<C> t) : VirtualTerm(std::move(t), {}, {}, {}) {}
+    VirtualTerm(Term<C> t) : VirtualTerm(std::move(t), {}, {}, {}) {}
 
-    static VirtualTerm periodic(sugar::Term<C> b, sugar::Numeral<C> p) { return VirtualTerm(std::move(b), {}, std::move(p), {}); }
+    static VirtualTerm periodic(Term<C> b, Numeral<C> p) { return VirtualTerm(std::move(b), {}, std::move(p), {}); }
 
     friend std::ostream& operator<<(std::ostream& out, VirtualTerm const& self)
     { 
@@ -108,7 +108,7 @@ namespace viras {
     VirtualTerm<C> operator+(VirtualTerm<C> const& t, ZComp<C> const& z) 
     { 
       VirtualTerm<C> out = t;
-      out.period = std::optional<sugar::Numeral<C>>(z.period);
+      out.period = std::optional<Numeral<C>>(z.period);
       return out; 
     }
 
@@ -122,12 +122,12 @@ namespace viras {
 
 #define LIFT_VIRTUAL_TERM_PLUS(Type)                                                      \
     template<class C>                                                                     \
-    VirtualTerm<C> operator+(sugar::Term<C> const& t, Type const& x)                      \
+    VirtualTerm<C> operator+(Term<C> const& t, Type const& x)                      \
     { return VirtualTerm<C>(t) + x; }                                                     \
                                                                                           \
     template<class C>                                                                     \
-    VirtualTerm<C> operator+(sugar::Numeral<C> const& t, Type const& x)                   \
-    { return sugar::to_term(t) + x; }                                                     \
+    VirtualTerm<C> operator+(Numeral<C> const& t, Type const& x)                   \
+    { return to_term(t) + x; }                                                     \
 
     LIFT_VIRTUAL_TERM_PLUS(Epsilon);
     LIFT_VIRTUAL_TERM_PLUS(ZComp<C>);
@@ -135,7 +135,7 @@ namespace viras {
 
     template<class C>
     VirtualTerm<C> operator+(int t, ZComp<C> const& z) 
-    { return sugar::to_numeral(z.period.config, t) + z; }
+    { return to_numeral(z.period.config, t) + z; }
 
   } // namespace sugar
 

@@ -1,14 +1,15 @@
 #pragma once
-#include "viras/sugar.h"
+#include "viras/base_types.h"
 #include "viras/iter.h"
 
 namespace viras {
 
+  using namespace sugar;
   template<class C>
   struct Break {
-    sugar::Term<C> t;
-    sugar::Numeral<C> p;
-    Break(sugar::Term<C> t, sugar::Numeral<C> p) : t(t), p(p) { VIRAS_ASSERT(p > 0) }
+    Term<C> t;
+    Numeral<C> p;
+    Break(Term<C> t, Numeral<C> p) : t(t), p(p) { VIRAS_ASSERT(p > 0) }
     friend std::ostream& operator<<(std::ostream& out, Break const& self)
     { return out << self.t << " + " << self.p << "ℤ"; }
     DERIVE_TUPLE(Break,t,p)
@@ -22,12 +23,12 @@ namespace viras {
   };
 
   template<class C>
-  sugar::Term<C> grid_ceil (sugar::Term<C> t, Break<C> s_pZ) { return t + rem(s_pZ.t - t, s_pZ.p); }
+  Term<C> grid_ceil (Term<C> t, Break<C> s_pZ) { return t + rem(s_pZ.t - t, s_pZ.p); }
   template<class C>
-  sugar::Term<C> grid_floor(sugar::Term<C> t, Break<C> s_pZ) { return t - rem(t - s_pZ.t, s_pZ.p); }
+  Term<C> grid_floor(Term<C> t, Break<C> s_pZ) { return t - rem(t - s_pZ.t, s_pZ.p); }
 
   template<class C>
-  auto intersectGrid(Break<C> s_pZ, Bound l, sugar::Term<C> t, sugar::Numeral<C> k, Bound r) {
+  auto intersectGrid(Break<C> s_pZ, Bound l, Term<C> t, Numeral<C> k, Bound r) {
     using namespace sugar;
     auto p = s_pZ.p;
     auto start = [&]() {

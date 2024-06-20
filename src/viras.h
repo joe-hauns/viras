@@ -2,10 +2,10 @@
 #include "viras/config_macros.h"
 
 #include "viras/output.h"
+#include "viras/base_types.h"
 #include "viras/iter.h"
 #include "viras/derive.h"
 #include "viras/predicate.h"
-#include "viras/sugar.h"
 #include "viras/virtual_term.h"
 #include "viras/lira_term.h"
 #include "viras/break.h"
@@ -244,11 +244,11 @@ namespace viras {
     template<class Conf>
     friend class VirasTest;
 
-    using Numeral  = sugar::Numeral<Config>;
-    using Term     = sugar::Term<Config>;
-    using Literals = sugar::Literals<Config>;
-    using Literal  = sugar::Literal<Config>;
-    using Var      = sugar::Var<Config>;
+    using Numeral  = viras::Numeral<Config>;
+    using Term     = viras::Term<Config>;
+    using Literals = viras::Literals<Config>;
+    using Literal  = viras::Literal<Config>;
+    using Var      = viras::Var<Config>;
     using Break    = viras::Break<Config>;
     using Epsilon = viras::Epsilon;
     using VirtualTerm = viras::VirtualTerm<Config>;
