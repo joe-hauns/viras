@@ -6,7 +6,7 @@ namespace viras {
 namespace term_engine {
 
 
-  namespace operators {
+  namespace ast {
 
   ///////////////////////////////////////
   // ATOMS
@@ -38,7 +38,7 @@ namespace term_engine {
 
 #define UNARY_OPERATOR(StructName, operator_fun)                                          \
     template<class E>                                                                     \
-    struct StructName { E inner; };                                                        \
+    struct StructName { E inner; };                                                       \
                                                                                           \
     template<class E>                                                                     \
     StructName<E> operator_fun(E e)                                                       \
@@ -69,7 +69,7 @@ namespace term_engine {
 
   inline auto numeral(size_t n, size_t m)  { return numeral(n) / numeral(m); }
 
-  } // namespace operators
+  } // namespace ast
 
   template<class C>
   struct Evaluator {
@@ -82,30 +82,30 @@ namespace term_engine {
     typename C::Numeral eval_numeral(int const& expr) 
     { return config->numeral(expr); }
 
-    typename C::Numeral eval_numeral(operators::Numeral n) 
+    typename C::Numeral eval_numeral(ast::Numeral n) 
     { return config->numeral(n.n); }
 
     template<class L, class R>
-    typename C::Numeral eval_numeral(operators::Add<L, R> const& expr) 
+    typename C::Numeral eval_numeral(ast::Add<L, R> const& expr) 
     { return config->add(eval_numeral(expr.lhs), eval_numeral(expr.rhs)); }
 
     template<class L, class R>
-    typename C::Numeral eval_numeral(operators::Mul<L, R> const& expr) 
+    typename C::Numeral eval_numeral(ast::Mul<L, R> const& expr) 
     { return config->mul(eval_numeral(expr.lhs), eval_numeral(expr.rhs)); }
 
     template<class E>
-    typename C::Numeral eval_numeral(operators::Inverse<E> const& expr) 
+    typename C::Numeral eval_numeral(ast::Inverse<E> const& expr) 
     { return config->inverse(eval_numeral(expr.inner)); }
 
     template<class E>
-    typename C::Numeral eval_numeral(operators::Floor<E> const& expr) 
+    typename C::Numeral eval_numeral(ast::Floor<E> const& expr) 
     { return config->floor(eval_numeral(expr.inner)); }
 
 
     template<class E>
-    typename C::Numeral eval_numeral(operators::Abs<E> const& expr) 
+    typename C::Numeral eval_numeral(ast::Abs<E> const& expr) 
     { 
-      using namespace operators;
+      using namespace ast;
       return eval_bool(expr >= 0) 
             ? eval_numeral(expr)
             : eval_numeral(-expr); }
@@ -122,52 +122,52 @@ namespace term_engine {
     typename C::Term eval_term(typename C::Numeral const& n) 
     { return config->term(eval_numeral(n)); }
 
-    typename C::Term eval_term(operators::Numeral const& n) 
+    typename C::Term eval_term(ast::Numeral const& n) 
     { return config->term(eval_numeral(n)); }
 
     template<class L, class R>
-    typename C::Term eval_term(operators::Add<L, R> const& expr) 
+    typename C::Term eval_term(ast::Add<L, R> const& expr) 
     { return config->add(eval_term(expr.lhs), eval_term(expr.rhs)); }
 
     template<class L, class R>
-    typename C::Term eval_term(operators::Mul<L, R> const& expr) 
+    typename C::Term eval_term(ast::Mul<L, R> const& expr) 
     { return config->mul(eval_numeral(expr.lhs), eval_term(expr.rhs)); }
 
-    typename C::Term eval_term(operators::TestVar expr) 
+    typename C::Term eval_term(ast::TestVar expr) 
     { return config->term(config->test_var(expr.name)); }
 
     template<class E>
-    typename C::Term eval_term(operators::Floor<E> const& expr) 
+    typename C::Term eval_term(ast::Floor<E> const& expr) 
     { return config->floor(eval_term(expr.inner)); }
 
 
 #define __EVAL_LITERAL(Ast, Sym)                                                          \
     template<class L, class R>                                                            \
     typename C::Literal eval_literal(Ast<L, R> expr) {                                    \
-      using namespace operators;                                                          \
+      using namespace ast;                                                                \
       /* l <= r <-> r - l >= 0 */                                                         \
       return config->create_literal(eval_term(expr.rhs - expr.lhs), Sym);                 \
     }                                                                                     \
 
-    __EVAL_LITERAL(operators::Leq , PredSymbol::Geq)
-    __EVAL_LITERAL(operators::Less, PredSymbol::Gt )
-    __EVAL_LITERAL(operators::Eq  , PredSymbol::Eq )
-    __EVAL_LITERAL(operators::Neq , PredSymbol::Neq)
+    __EVAL_LITERAL(ast::Leq , PredSymbol::Geq)
+    __EVAL_LITERAL(ast::Less, PredSymbol::Gt )
+    __EVAL_LITERAL(ast::Eq  , PredSymbol::Eq )
+    __EVAL_LITERAL(ast::Neq , PredSymbol::Neq)
 
     template<class L, class R>
-    bool eval_bool(operators::Leq<L, R> const& expr) 
+    bool eval_bool(ast::Leq<L, R> const& expr) 
     { return config->leq(eval_numeral(expr.lhs), eval_numeral(expr.rhs)); }
 
     template<class L, class R>
-    bool eval_bool(operators::Less<L, R> const& expr) 
+    bool eval_bool(ast::Less<L, R> const& expr) 
     { return config->less(eval_numeral(expr.lhs), eval_numeral(expr.rhs)); }
 
     template<class L, class R>
-    bool eval_bool(operators::Eq<L, R> const& expr) 
+    bool eval_bool(ast::Eq<L, R> const& expr) 
     { return config->less(eval_numeral(expr.lhs), eval_numeral(expr.rhs)); }
 
     template<class L, class R>
-    bool eval_bool(operators::Neq<L, R> const& expr) 
+    bool eval_bool(ast::Neq<L, R> const& expr) 
     { return config->less(eval_numeral(expr.lhs), eval_numeral(expr.rhs)); }
 
   };
@@ -181,7 +181,7 @@ namespace term_engine {
 #define viras_eval_bool(config, expr) viras_eval(bool, config, expr)
 
 #define viras_eval(kind, config, expr) [&]() {                                            \
-      using namespace viras::term_engine::operators;                                      \
+      using namespace viras::term_engine::ast;                                            \
       return viras::term_engine::evaluator(config).eval_ ## kind(expr);                   \
     }()                                                                                   \
 
