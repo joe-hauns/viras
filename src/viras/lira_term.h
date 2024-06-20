@@ -8,6 +8,7 @@ namespace viras {
 
   template<class C>
   struct LiraTerm {
+    // C* config;
     Term<C> self;
     Var<C> x;
     Term<C> lim;
@@ -30,6 +31,7 @@ namespace viras {
 
     }
 
+    // Numeral<C> deltaX() const { return viras_eval_numeral(config, abs(1/oslp) * deltaY); }
     Numeral<C> deltaX() const { return abs(1/oslp) * deltaY; }
     Term<C> lim_at(Term<C> x0) const { return subs(lim, x, x0); }
     Term<C> dseg(Term<C> x0) const { return -(sslp * x0) + lim_at(x0); }
