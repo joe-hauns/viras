@@ -291,7 +291,6 @@ namespace viras {
 
   template<class C>
   Term<C> subs(Term<C> self, Var<C> var, Term<C> by) {
-    using namespace sugar;
     return matchTerm(self, 
       /* var y */     [&](auto v)         { return v == var ? by : self; }, 
       /* numeral 1 */ [&]()               { return self; }, 

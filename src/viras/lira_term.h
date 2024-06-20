@@ -27,45 +27,27 @@ namespace viras {
     std::vector<Break> breaks;
 
     Term distXminus() const {
-      using namespace sugar;
       return -(1 / oslp) * (oslp > 0 ? distYminus + deltaY
                                      : distYminus         );
     }
 
     Term distXplus() const { 
-      using namespace sugar;
       return  -(1 / oslp) * (oslp > 0 ? distYminus
                                       : distYminus + deltaY);
 
     }
 
-    Numeral deltaX() const { 
-      using namespace sugar;
-      return abs(1/oslp) * deltaY; 
-    }
-    Term lim_at(Term x0) const { 
-      using namespace sugar;
-      return subs(lim, x, x0); 
-    }
-    Term dseg(Term x0) const { 
-      using namespace sugar;
-      return -(sslp * x0) + lim_at(x0); 
-    }
-    Term zero(Term x0) const { 
-      using namespace sugar;
-      return x0 - lim_at(x0) / sslp; 
-    }
-    bool periodic() const { 
-      using namespace sugar;
-      return oslp == 0; 
-    }
+    Numeral deltaX() const { return abs(1/oslp) * deltaY; }
+    Term lim_at(Term x0) const { return subs(lim, x, x0); }
+    Term dseg(Term x0) const { return -(sslp * x0) + lim_at(x0); }
+    Term zero(Term x0) const { return x0 - lim_at(x0) / sslp; }
+    bool periodic() const { return oslp == 0; }
 
     friend std::ostream& operator<<(std::ostream& out, LiraTerm const& self)
     { return out << self.self; }
 
     template<class MatchRec>
     static Term calcLim(LiraTerm const& self, Var const& x, MatchRec matchRec) {
-       using namespace sugar;
        return matchRec(
         /* var y */ [&](auto y) 
         { return self.self; },
@@ -89,7 +71,6 @@ namespace viras {
 
     template<class MatchRec>
     static Numeral calcPer(LiraTerm const& self, Var const& x, MatchRec matchRec) {
-      using namespace sugar;
       auto to_numeral = [&](auto n) { return viras::to_numeral(self.self.config, n); };
        return matchRec(
         /* var y */ [&](auto y) 
@@ -115,7 +96,6 @@ namespace viras {
 
     template<class MatchRec>
     static Numeral calcSslp(LiraTerm const& self, Var const& x, MatchRec matchRec) {
-      using namespace sugar;
       auto to_numeral = [&](auto n) { return viras::to_numeral(self.self.config, n); };
       return matchRec(
         /* var y */ [&](auto y) 
@@ -138,7 +118,6 @@ namespace viras {
 
     template<class MatchRec>
     static Numeral calcOslp(LiraTerm const& self, Var const& x, MatchRec matchRec) {
-      using namespace sugar;
       auto to_numeral = [&](auto n) { return viras::to_numeral(self.self.config, n); };
       return matchRec(
         /* var y */ [&](auto y) 
@@ -161,7 +140,6 @@ namespace viras {
 
     template<class MatchRec>
     static Numeral calcDeltaY(LiraTerm const& self, Var const& x, MatchRec matchRec) {
-      using namespace sugar;
       auto to_numeral = [&](auto n) { return viras::to_numeral(self.self.config, n); };
        return matchRec(
         /* var y */ [&](auto y) 
@@ -188,7 +166,6 @@ namespace viras {
 
     template<class MatchRec>
     static Term calcDistYminus(LiraTerm const& self, Var const& x, MatchRec matchRec) {
-      using namespace sugar;
       auto n_term = [&](auto n) { return viras::to_term(self.self.config, n); };
        return matchRec(
         /* var y */ [&](auto y) 
@@ -215,7 +192,6 @@ namespace viras {
 
     template<class MatchRec>
     static std::vector<Break> calcBreaks(LiraTerm const& self, Var const& x, MatchRec matchRec) {
-      using namespace sugar;
       auto n_term = [&](auto n) { return viras::to_term(self.self.config, n); };
       return matchRec(
         /* var y */ [&](auto y) 

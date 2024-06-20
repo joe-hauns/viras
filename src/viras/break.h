@@ -4,7 +4,6 @@
 
 namespace viras {
 
-  using namespace sugar;
   template<class C>
   struct Break {
     Term<C> t;
@@ -29,7 +28,6 @@ namespace viras {
 
   template<class C>
   auto intersectGrid(Break<C> s_pZ, Bound l, Term<C> t, Numeral<C> k, Bound r) {
-    using namespace sugar;
     auto p = s_pZ.p;
     auto start = [&]() {
       switch(l) {

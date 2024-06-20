@@ -233,8 +233,6 @@ namespace viras {
   auto simplifyingConfig(Config c)
   { return SimplifyingConfig<Config>(std::move(c)); }
 
-  using namespace sugar;
-
   template<class Config
     , bool optimizeBounds = true
     , bool optimizeGridIntersection = false
