@@ -23,6 +23,12 @@ namespace viras {
     DERIVE_TUPLE_LESS
   };
 
+  // template<class C> using Term     = typename C::Term;
+  // template<class C> using Var      = typename C::Var;
+  // template<class C> using Literal  = typename C::Literal;
+  // template<class C> using Literals = typename C::Literals;
+  // template<class C> using Numeral  = typename C::Numeral;
+  // template<class C> using Literals = typename C::Literals;
   template<class C> struct Term    : public WithConfig<C, typename C::Term   > {};
   template<class C> struct Numeral : public WithConfig<C, typename C::Numeral> {};
   template<class C> struct Var     : public WithConfig<C, typename C::Var    > {};

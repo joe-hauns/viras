@@ -1,5 +1,6 @@
 #pragma once
 #include <utility>
+#include <map>
 #include "viras/predicate.h"
 #include "viras/iter.h"
 

@@ -1,6 +1,7 @@
 #pragma once
 #include <utility>
 #include "viras/predicate.h"
+#include "viras/virtual_term.h"
 
 namespace viras {
 namespace term_engine {
@@ -12,12 +13,17 @@ namespace term_engine {
   // ATOMS
   ///////////////////////////////////////
 
+  static constexpr Infty infty {};
+  // struct Infty { bool positive; };
+  // inline Infty operator-(Infty const& inf) { return { !inf.positive }; }
+
   struct Numeral { size_t n; };
   inline Numeral numeral(size_t n)  { return Numeral { n }; };
+  inline Numeral operator""_n(unsigned long long n) { return numeral(n); }
 
   struct TestVar { const char* name; };
   inline TestVar test_var(const char* name)  { return TestVar { name }; };
-
+  inline TestVar operator""_v(const char* name, size_t len) { return test_var(name); }
 
   ///////////////////////////////////////
   // OPERATORS
@@ -74,76 +80,80 @@ namespace term_engine {
   template<class C>
   struct Evaluator {
     C* config;
+    using Term    = typename C::Term;
+    using Numeral = typename C::Numeral;
+    using Var     = typename C::Var;
+    using Literal = typename C::Literal;
 
     // TODO use move instead of copy
-    typename C::Numeral eval_numeral(typename C::Numeral const& n) 
+    Numeral eval_numeral(Numeral const& n) 
     { return n; }
 
-    typename C::Numeral eval_numeral(int const& expr) 
+    Numeral eval_numeral(int const& expr) 
     { return config->numeral(expr); }
 
-    typename C::Numeral eval_numeral(ast::Numeral n) 
+    Numeral eval_numeral(ast::Numeral n) 
     { return config->numeral(n.n); }
 
     template<class L, class R>
-    typename C::Numeral eval_numeral(ast::Add<L, R> const& expr) 
+    Numeral eval_numeral(ast::Add<L, R> const& expr) 
     { return config->add(eval_numeral(expr.lhs), eval_numeral(expr.rhs)); }
 
     template<class L, class R>
-    typename C::Numeral eval_numeral(ast::Mul<L, R> const& expr) 
+    Numeral eval_numeral(ast::Mul<L, R> const& expr) 
     { return config->mul(eval_numeral(expr.lhs), eval_numeral(expr.rhs)); }
 
     template<class E>
-    typename C::Numeral eval_numeral(ast::Inverse<E> const& expr) 
+    Numeral eval_numeral(ast::Inverse<E> const& expr) 
     { return config->inverse(eval_numeral(expr.inner)); }
 
     template<class E>
-    typename C::Numeral eval_numeral(ast::Floor<E> const& expr) 
+    Numeral eval_numeral(ast::Floor<E> const& expr) 
     { return config->floor(eval_numeral(expr.inner)); }
 
 
     template<class E>
-    typename C::Numeral eval_numeral(ast::Abs<E> const& expr) 
+    Numeral eval_numeral(ast::Abs<E> const& expr) 
     { 
       using namespace ast;
       return eval_bool(expr >= 0) 
             ? eval_numeral(expr)
             : eval_numeral(-expr); }
 
-    typename C::Term eval_term(int const& expr) 
+    Term eval_term(int const& expr) 
     { return config->term(eval_numeral(expr)); }
 
-    typename C::Term eval_term(typename C::Var const& term) 
+    Term eval_term(Var const& term) 
     { return config->term(term); }
 
-    typename C::Term eval_term(typename C::Term const& term) 
+    Term eval_term(Term const& term) 
     { return term; }
 
-    typename C::Term eval_term(typename C::Numeral const& n) 
+    Term eval_term(Numeral const& n) 
     { return config->term(eval_numeral(n)); }
 
-    typename C::Term eval_term(ast::Numeral const& n) 
+    Term eval_term(ast::Numeral const& n) 
     { return config->term(eval_numeral(n)); }
 
     template<class L, class R>
-    typename C::Term eval_term(ast::Add<L, R> const& expr) 
+    Term eval_term(ast::Add<L, R> const& expr) 
     { return config->add(eval_term(expr.lhs), eval_term(expr.rhs)); }
 
     template<class L, class R>
-    typename C::Term eval_term(ast::Mul<L, R> const& expr) 
+    Term eval_term(ast::Mul<L, R> const& expr) 
     { return config->mul(eval_numeral(expr.lhs), eval_term(expr.rhs)); }
 
-    typename C::Term eval_term(ast::TestVar expr) 
+    Term eval_term(ast::TestVar expr) 
     { return config->term(config->test_var(expr.name)); }
 
     template<class E>
-    typename C::Term eval_term(ast::Floor<E> const& expr) 
+    Term eval_term(ast::Floor<E> const& expr) 
     { return config->floor(eval_term(expr.inner)); }
 
 
 #define __EVAL_LITERAL(Ast, Sym)                                                          \
     template<class L, class R>                                                            \
-    typename C::Literal eval_literal(Ast<L, R> expr) {                                    \
+    Literal eval_literal(Ast<L, R> expr) {                                    \
       using namespace ast;                                                                \
       /* l <= r <-> r - l >= 0 */                                                         \
       return config->create_literal(eval_term(expr.rhs - expr.lhs), Sym);                 \
@@ -169,6 +179,38 @@ namespace term_engine {
     template<class L, class R>
     bool eval_bool(ast::Neq<L, R> const& expr) 
     { return config->less(eval_numeral(expr.lhs), eval_numeral(expr.rhs)); }
+
+    VirtualTerm<C> eval_virtual_term(Infty const& expr) 
+    { return VirtualTerm<C>({},{},{},{expr}); }
+
+    VirtualTerm<C> eval_virtual_term(Epsilon const& expr) 
+    { return VirtualTerm<C>({},{expr},{},{}); }
+
+    VirtualTerm<C> eval_virtual_term(ZComp<C> const& expr) 
+    { return VirtualTerm<C>({},{},{expr.period},{}); }
+
+    template<class L, class R>
+    VirtualTerm<C> eval_virtual_term(ast::Add<L, R> const& expr) 
+    { 
+      auto lhs = eval_virtual_term(expr.lhs);
+      auto rhs = eval_virtual_term(expr.rhs);
+      VIRAS_ASSERT(!bool(lhs.infty  ) || !bool(rhs.infty  ))
+      VIRAS_ASSERT(!bool(lhs.epsilon) || !bool(rhs.epsilon))
+      VIRAS_ASSERT(!bool(lhs.period ) || !bool(rhs.period ))
+      return VirtualTerm<C>(
+            lhs.term && rhs.term ? std::optional<Term>(*lhs.term  + *rhs.term)
+          : lhs.term             ? std::optional<Term>(*lhs.term             )
+          :             rhs.term ? std::optional<Term>(             *rhs.term)
+          :                        std::optional<Term>(                      ), 
+          lhs.epsilon ? lhs.epsilon : rhs.epsilon,
+          lhs.period ? lhs.period : rhs.period,
+          lhs.infty ? lhs.infty : rhs.infty);
+    }
+
+    template<class T>
+    VirtualTerm<C> eval_virtual_term(T const& expr) 
+    { return VirtualTerm<C>({eval_term(expr)},{},{},{}); }
+
 
   };
   template<class C>
