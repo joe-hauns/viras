@@ -6,7 +6,8 @@
 
 namespace viras {
 
-  struct DefaultOpts {
+  struct DefaultOpts 
+  {
     static bool constexpr optimizeBounds() { return true; }
     static bool constexpr optimizeGridIntersection() { return false; }
     static bool constexpr simplify() { return true; }

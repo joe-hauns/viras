@@ -7,8 +7,15 @@
 namespace viras {
 
   template<class C>
-  struct LiraTerm {
-    // C* config;
+  struct LiraTerm 
+  {
+  private:
+    LiraTerm() {}
+  public:
+    explicit LiraTerm(LiraTerm const&) = default;
+    LiraTerm(LiraTerm &&) = default;
+    LiraTerm& operator=(LiraTerm &&) = default;
+
     Term<C> self;
     Var<C> x;
     Term<C> lim;
@@ -31,7 +38,6 @@ namespace viras {
 
     }
 
-    // Numeral<C> deltaX() const { return viras_eval_numeral(config, abs(1/oslp) * deltaY); }
     Numeral<C> deltaX() const { return abs(1/oslp) * deltaY; }
     Term<C> lim_at(Term<C> x0) const { return subs(lim, x, x0); }
     Term<C> dseg(Term<C> x0) const { return -(sslp * x0) + lim_at(x0); }
@@ -41,6 +47,62 @@ namespace viras {
     friend std::ostream& operator<<(std::ostream& out, LiraTerm const& self)
     { return out << self.self; }
 
+   
+    static LiraTerm analyse(Term<C> self, Var<C> x) {
+      LiraTerm rec0;
+      LiraTerm rec1;
+      matchTerm(self, 
+        /* var v */ [&](auto y) { return std::make_tuple(); }, 
+        /* numeral 1 */ [&]() { return std::make_tuple(); }, 
+        /* k * t */ [&](auto k, auto t) { 
+          rec0 = analyse(t, x);
+          return std::make_tuple();
+        }, 
+
+        /* l + r */ [&](auto l, auto r) { 
+          rec0 = analyse(l, x);
+          rec1 = analyse(r, x);
+          return std::make_tuple();
+        }, 
+
+        /* floor */ [&](auto t) { 
+          rec0 = analyse(t, x);
+          return std::make_tuple();
+        });
+      auto matchRec = [&](auto if_var, auto if_one, auto if_mul, auto if_add, auto if_floor) {
+        return matchTerm(self, 
+        /* var v */ if_var,
+        /* numeral 1 */ if_one,
+        /* k * t */ [&](auto k, auto t) { return if_mul(k, t, rec0); }, 
+        /* l + r */ [&](auto l, auto r) { return if_add(l, r, rec0, rec1); }, 
+        /* floor */ [&](auto t) { return if_floor(t, rec0); });
+      };
+      LiraTerm res;
+      res.self = self;
+      res.x = x;
+      res.per = calcPer(res, x, matchRec);
+      res.lim = calcLim(res, x, matchRec);
+      res.sslp = calcSslp(res, x, matchRec);
+      res.oslp = calcOslp(res, x, matchRec);
+      res.deltaY = calcDeltaY(res, x, matchRec);
+      res.distYminus = calcDistYminus(res, x, matchRec);
+      res.breaks = calcBreaks(res, x, matchRec);
+      
+#define DEBUG_FIELD(lvl, field)                                                                \
+        VIRAS_LOG(lvl, "analyse(", res.self, ")." #field " = ", res.field)
+        // DEBUG_FIELD(breaks.size())
+        // iter::array(res.breaks) | iter::dbg("break") | iter::foreach([](auto...){});
+        // DEBUG_FIELD(per)
+        // DEBUG_FIELD(deltaY)
+
+        if (x.config->opts.optimizeBounds()) {
+          VIRAS_ASSERT(res.per != 0 || res.deltaY == 0);
+        }
+        VIRAS_ASSERT((res.per == 0) == (res.breaks.size() == 0));
+        return res;
+    }
+ 
+  private:
     template<class MatchRec>
     static Term<C> calcLim(LiraTerm const& self, Var<C> const& x, MatchRec matchRec) {
        return matchRec(
@@ -233,62 +295,6 @@ namespace viras {
         }
       );
     }
-
-
-    static LiraTerm analyse(Term<C> self, Var<C> x) {
-      LiraTerm rec0;
-      LiraTerm rec1;
-      matchTerm(self, 
-        /* var v */ [&](auto y) { return std::make_tuple(); }, 
-        /* numeral 1 */ [&]() { return std::make_tuple(); }, 
-        /* k * t */ [&](auto k, auto t) { 
-          rec0 = analyse(t, x);
-          return std::make_tuple();
-        }, 
-
-        /* l + r */ [&](auto l, auto r) { 
-          rec0 = analyse(l, x);
-          rec1 = analyse(r, x);
-          return std::make_tuple();
-        }, 
-
-        /* floor */ [&](auto t) { 
-          rec0 = analyse(t, x);
-          return std::make_tuple();
-        });
-      auto matchRec = [&](auto if_var, auto if_one, auto if_mul, auto if_add, auto if_floor) {
-        return matchTerm(self, 
-        /* var v */ if_var,
-        /* numeral 1 */ if_one,
-        /* k * t */ [&](auto k, auto t) { return if_mul(k, t, rec0); }, 
-        /* l + r */ [&](auto l, auto r) { return if_add(l, r, rec0, rec1); }, 
-        /* floor */ [&](auto t) { return if_floor(t, rec0); });
-      };
-      LiraTerm res;
-      res.self = self;
-      res.x = x;
-      res.per = calcPer(res, x, matchRec);
-      res.lim = calcLim(res, x, matchRec);
-      res.sslp = calcSslp(res, x, matchRec);
-      res.oslp = calcOslp(res, x, matchRec);
-      res.deltaY = calcDeltaY(res, x, matchRec);
-      res.distYminus = calcDistYminus(res, x, matchRec);
-      res.breaks = calcBreaks(res, x, matchRec);
-      
-#define DEBUG_FIELD(lvl, field)                                                                \
-        VIRAS_LOG(lvl, "analyse(", res.self, ")." #field " = ", res.field)
-        // DEBUG_FIELD(breaks.size())
-        // iter::array(res.breaks) | iter::dbg("break") | iter::foreach([](auto...){});
-        // DEBUG_FIELD(per)
-        // DEBUG_FIELD(deltaY)
-
-        if (x.config->opts.optimizeBounds()) {
-          VIRAS_ASSERT(res.per != 0 || res.deltaY == 0);
-        }
-        VIRAS_ASSERT((res.per == 0) == (res.breaks.size() == 0));
-        return res;
-    }
-
 
   };
 

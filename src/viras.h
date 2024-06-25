@@ -3,7 +3,7 @@
 
 #include "viras/output.h"
 #include "viras/base_types.h"
-#include "viras/simpl_config.h"
+#include "viras/api.h"
 #include "viras/iter.h"
 #include "viras/derive.h"
 #include "viras/predicate.h"
@@ -14,12 +14,9 @@
 
 namespace viras {
 
-  template<class C
-    // TODO move around the boolean optimization configuration
-    , bool optimizeBounds = true
-    , bool optimizeGridIntersection = false
-    >
-  class Viras {
+  template<class C>
+  class Viras 
+  {
 
     template<class Conf>
     friend class VirasTest;
@@ -46,7 +43,6 @@ namespace viras {
 
     ~Viras() {};
 
-        // TODO get rid of implicit copies of LiraTerm
     // TODO make it possible to fail gracefully with uniterpreted stuff
     // TODO get rid of this?
     static LiraTerm<C> analyse(Term<C> self, Var<C> x) { return LiraTerm<C>::analyse(self,x); }
@@ -119,8 +115,6 @@ namespace viras {
                                          
                                  | iter_dbg(1, "ezero")
                        ; };
-                       DBGE(t.sslp)
-                       DBGE(symbol)
                        auto eseg         = [&]() { 
                          return 
                            iter::if_then_(t.sslp == 0 || ( t.sslp < 0 && isIneq(symbol)), breaks_plus_epsilon())
@@ -132,7 +126,7 @@ namespace viras {
                        ; };
                        auto ebound_plus  = [&]() { return 
                            iter::if_then_(lit.lim(infty), iter::vals<VT>(t.distXplus(), t.distXplus() + epsilon))
-                                 else____(                   iter::vals<VT>(t.distXplus()                         ))
+                                else____(                   iter::vals<VT>(t.distXplus()                         ))
                                  | iter_dbg(1, "ebound_plus")
                                  ; };
 
