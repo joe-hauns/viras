@@ -275,14 +275,12 @@ namespace viras {
       res.distYminus = calcDistYminus(res, x, matchRec);
       res.breaks = calcBreaks(res, x, matchRec);
       
-#define DEBUG_FIELD(field)                                                                \
-        DBG("analyse(", res.self, ")." #field " = ", res.field)
+#define DEBUG_FIELD(lvl, field)                                                                \
+        VIRAS_LOG(lvl, "analyse(", res.self, ")." #field " = ", res.field)
         // DEBUG_FIELD(breaks.size())
         // iter::array(res.breaks) | iter::dbg("break") | iter::foreach([](auto...){});
-        // DBG("")
         // DEBUG_FIELD(per)
         // DEBUG_FIELD(deltaY)
-        // DBG("")
 
         if (C::optimizeBounds) {
           VIRAS_ASSERT(res.per != 0 || res.deltaY == 0);
