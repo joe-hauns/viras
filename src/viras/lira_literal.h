@@ -26,6 +26,9 @@ namespace viras {
       }
     }
 
+    static LiraLiteral analyse(Literal<C> const& self, Var<C> x) 
+    { return LiraLiteral { LiraTerm<C>::analyse(self.term(), x), self.symbol() }; }
+
     friend std::ostream& operator<<(std::ostream& out, LiraLiteral const& self)
     { return out << self.term << " " << self.symbol << " 0"; }
   };

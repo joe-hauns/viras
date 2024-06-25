@@ -44,19 +44,13 @@ namespace viras {
     ~Viras() {};
 
     // TODO make it possible to fail gracefully with uniterpreted stuff
-    // TODO get rid of this?
-    static LiraTerm<C> analyse(Term<C> self, Var<C> x) { return LiraTerm<C>::analyse(self,x); }
 
-    LiraLiteral<C> analyse(Literal<C> self, Var<C> x) 
-    { return LiraLiteral<C> { analyse(self.term(), x), self.symbol() }; }
-
+  private:
     std::vector<LiraLiteral<C>> analyse(Literals<C> const& self, Var<C> x) 
     { 
-      std::vector<LiraLiteral<C>> out;
-      iter::array(self) 
-        | iter::map([&](auto lit) { return analyse(lit, x); })
-        | iter::foreach([&](auto lit) { return out.push_back(std::move(lit)); });
-      return out; 
+      return iter::array(self) 
+        | iter::map([&](auto lit) { return LiraLiteral<C>::analyse(lit, x); })
+        | iter::collect_vec;
     }
 
 
@@ -253,6 +247,7 @@ namespace viras {
                        }()));
     }
 
+  private:
     auto quantifier_elimination(Var<C> x, std::vector<LiraLiteral<C>> const& lits)
     {
       return elim_set(x, lits)
@@ -261,25 +256,17 @@ namespace viras {
         | iter::flat_map([this,&lits,x](auto t) { return vsubs(lits, x, t); });
     }
 
-    auto quantifier_elimination(typename C::Var x, Literals<C> const& ls)
+  public:
+    auto quantifier_elimination(typename C::Var x, typename C::Literals ls)
     {
-      auto lits = std::make_unique<std::vector<LiraLiteral<C>>>(analyse(ls, x));
+      // TODO turn shared into unique ptr
+      auto lits = std::make_shared<std::vector<LiraLiteral<C>>>(analyse(ls, x));
       return quantifier_elimination(Var<C> { &_config, x }, *lits)
         | iter::inspect([ /* we store the pointer to the literals in this closure */ lits = std::move(lits)](auto) { })
         | iter::map([&](auto lits) { return std::move(lits) | iter::map([](auto lit) { return lit.inner; }); });
     }
 
-    auto quantifier_elimination(typename C::Var x, std::vector<LiraLiteral<C>> const& lits)
-    {
-      return quantifier_elimination(Var<C> { &_config, x }, lits)
-        | iter::map([&](auto lits) { return std::move(lits) | iter::map([](auto lit) { return lit.inner; }); });
-    }
-
   };
-
-  // template<class Config>
-  // auto viras(Config c) { return Viras<Config>(std::move(c)); }
-
 
   template<class Api, class Opts = DefaultOpts>
   auto viras(Api api, Opts opts = Opts())

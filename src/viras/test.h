@@ -111,7 +111,7 @@ struct VirasTest : Viras<C>
     std::optional<std::string> run(Viras<C>& viras)
     {
       auto analysed = iter::array(conj) 
-        | iter::map([&](auto l) { return viras.analyse(*l, x); })
+        | iter::map([&](auto l) { return LiraLiteral<C>::analyse(*l, x); })
         | iter::collect_vec;
       auto result = viras.elim_set(x, analysed) | iter::collect_vec;
       auto error = expected.check(result);
@@ -139,7 +139,7 @@ struct VirasTest : Viras<C>
 
     std::optional<std::string> run(Viras<C>& viras)
     {
-      auto result = viras.analyse(term, x);
+      auto result = LiraTerm<C>::analyse(term, x);
       for (auto& c : expected) {
         auto res = c(term, result);
         if (res) {
