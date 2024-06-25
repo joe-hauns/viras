@@ -9,8 +9,8 @@ namespace viras {
     switch(self) {
       case PredSymbol::Gt: return out << ">";
       case PredSymbol::Geq: return out << ">=";
-      case PredSymbol::Neq: return out << "=";
-      case PredSymbol::Eq: return out << "!=";
+      case PredSymbol::Eq: return out << "=";
+      case PredSymbol::Neq: return out << "!=";
     }
   }
 }

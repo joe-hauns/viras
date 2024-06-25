@@ -219,8 +219,8 @@ namespace viras {
 
     __VIRAS__LITERAL_CONSTRUCTION_OPERATOR(operator> , PredSymbol::Gt);
     __VIRAS__LITERAL_CONSTRUCTION_OPERATOR(operator>=, PredSymbol::Geq);
-    __VIRAS__LITERAL_CONSTRUCTION_OPERATOR(eq, PredSymbol::Neq);
-    __VIRAS__LITERAL_CONSTRUCTION_OPERATOR(neq, PredSymbol::Eq);
+    __VIRAS__LITERAL_CONSTRUCTION_OPERATOR(eq , PredSymbol::Eq);
+    __VIRAS__LITERAL_CONSTRUCTION_OPERATOR(neq, PredSymbol::Neq);
 
   } // namespace sugar
 

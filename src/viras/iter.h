@@ -51,6 +51,29 @@ namespace viras {
       });
     };
 
+    template<class Iter>
+    struct StlForeachLoopIterable {
+      Iter iter;
+      struct Begin {
+        Iter& iter;
+        std::optional<value_type<Iter>> cur;
+        void operator++() { cur = iter.next(); }
+        value_type<Iter> operator*() { return std::move(*cur); }
+      };
+      struct End {
+        friend bool operator!=(Begin const& begin, End const& end) {
+          return bool(begin.cur);
+        }
+      };
+      Begin begin() { return { .iter = iter, .cur = iter.next(), }; }
+      End end() { return {}; }
+    };
+
+    constexpr auto std_for = 
+      iterCombinator([](auto iter) {
+          return StlForeachLoopIterable<decltype(iter)> { std::move(iter) };
+      });
+
 
     constexpr auto collect_vec = 
       iterCombinator([](auto iter) {

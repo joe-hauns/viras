@@ -1,8 +1,28 @@
 #pragma once
 #include "viras.h"
+#include "viras/iter.h"
 #include <regex>
 
 namespace viras {
+
+
+template<class A>
+bool is_set_equal(std::vector<A> const& lhs, std::vector<A> const& rhs) {
+  auto find_missing = [](auto& l, auto& r) {
+    return iter::array(l)
+      | iter::find([&](auto* x) {
+          return !(iter::array(r)
+            | iter::any([&](auto* y) { return *x == *y; }));
+            });
+  };
+  if (find_missing(lhs, rhs)) {
+    return false;
+  } else if (find_missing(rhs, lhs)) {
+    return false;
+  } else {
+    return true;
+  }
+}
 
 template<class C>
 struct VirasTest : Viras<C> {
@@ -17,6 +37,28 @@ struct VirasTest : Viras<C> {
   using Viras<C>::numeral;
 
   public:
+
+  struct SetEqual {
+    std::vector<VirtualTerm<C>> expected;
+
+    std::optional<std::string> check(std::vector<VirtualTerm<C>> const& result) {
+      for (auto s : iter::array(expected) | iter::std_for) {
+        if (!(iter::array(result) | iter::any([&](auto* res) { return *res == *s; })) ) {
+          return output_to_string("not found: ", s);
+        }
+      }
+      for (auto s : iter::array(result) | iter::std_for) {
+        if (!(iter::array(expected) | iter::any([&](auto* exp) { return *exp == *s; })) ) {
+          return output_to_string("unexpected term in result: ", s);
+        }
+      }
+      return {};
+    }
+    friend std::ostream& operator<<(std::ostream& out, SetEqual const& self)
+    { return out << "set equal: " << self.expected; }
+  };
+
+
 
   struct AllContained {
     std::vector<VirtualTerm<C>> expected;
@@ -34,9 +76,13 @@ struct VirasTest : Viras<C> {
   };
 
 
-  struct ExpectedCheck : std::variant<AllContained> 
+  using ExpectedCheckVar = std::variant<AllContained, SetEqual>;
+  struct ExpectedCheck :  ExpectedCheckVar
   {
-    using std::variant<AllContained>::variant;
+    // using ExpectedCheckVar::variant;
+    ExpectedCheck(AllContained x) : ExpectedCheckVar(std::move(x)) {}
+    ExpectedCheck(SetEqual     x) : ExpectedCheckVar(std::move(x)) {}
+
     std::optional<std::string> check(std::vector<VirtualTerm<C>> const& result) 
     { return std::visit([&](auto& x) { return x.check(result); }, *this); }
     friend std::ostream& operator<<(std::ostream& out, ExpectedCheck const& self)
@@ -46,6 +92,14 @@ struct VirasTest : Viras<C> {
   template<class... As>
   ExpectedCheck containsAll(As... as)
   { return ExpectedCheck(AllContained{std::vector<VirtualTerm<C>>{VirtualTerm<C>(as)...}}); }
+
+  ExpectedCheck set_equal(std::vector<VirtualTerm<C>> terms)
+  { return ExpectedCheck(SetEqual{std::move(terms)}); }
+
+
+  template<class... As>
+  ExpectedCheck set_equal(As... as)
+  { return ExpectedCheck(SetEqual{std::vector<VirtualTerm<C>>{VirtualTerm<C>(as)...}}); }
 
 
   struct ElimSetTest {
@@ -158,6 +212,29 @@ struct VirasTest : Viras<C> {
     auto b = term(this->test_var("b"));
     auto c = term(this->test_var("c"));
     auto frac = [&](auto l, auto r) { return numeral(l) / r; };
+    std::vector<Term<C>> const_terms = { 
+        a 
+      , a + b
+      , 0 * x 
+      , x + a - x
+      , floor(x) + a - floor(x) 
+    };
+    // std::vector<Term<C>> _linear_terms_pos_slope = { 
+    //     a + frac(1,2) * x
+    //   , a + 2 * x + b + 3 * x
+    //   , 0 * x + a + x
+    //   , 2 * x + a - x 
+    //   , floor(x) + a - floor(x)  + frac(1,2) * x
+    // };
+    //
+    // auto linear_terms_pos_slope = [&]() { return 
+    //   iter::array(_linear_terms_pos_slope) | iter::map([](auto* x) { return *x; }); };
+    //
+    // auto linear_terms_neg_slope = [&]() { return 
+    //   linear_terms_pos_slope() | iter::map([](auto t) { return -t; }); };
+    //
+    // auto linear_terms_non_zero_slope = []() { return
+    //   iter::concat(linear_terms_pos_slope(), linear_terms_neg_slope()); };
 
 #define DEF_TEST(name, ...)                                                               \
     {                                                                                     \
@@ -166,17 +243,39 @@ struct VirasTest : Viras<C> {
       tests.push_back(std::make_pair(#name, std::move(test)));                            \
     }                                                                                     \
 
-#define TEST_EQ(lhs, rhs)                                                                 \
-  [=](auto input, LiraTerm<C>& result) -> std::optional<std::string> {                       \
-    if(lhs == rhs)  {                                                                     \
+#define TEST_EQ(lhs, rhs)  TEST_CMP(lhs,==,rhs)
+#define TEST_GT(lhs, rhs)  TEST_CMP(lhs,>,rhs)
+#define TEST_GEQ(lhs, rhs)  TEST_CMP(lhs,>=,rhs)
+#define TEST_LEQ(lhs, rhs)  TEST_CMP(lhs,<=,rhs)
+#define TEST_LT(lhs, rhs)  TEST_CMP(lhs,<,rhs)
+
+
+
+#define TEST_F(FUN, lhs, rhs)                                                            \
+  [=](auto input, LiraTerm<C>& result) -> std::optional<std::string> {                    \
+    if(FUN(lhs, rhs))  {                                                                     \
       return std::optional<std::string>();                                                \
     } else {                                                                              \
-      return output_to_string(                                                  \
-          "[    input ] ", input, "\n",                                       \
-          "[    query ] ", #lhs, "\n",                                        \
-          "[    value ] ", lhs, "\n",                                         \
-          "[ expected ] ", rhs, "\n"                                          \
-          );                                                                       \
+      return output_to_string(                                                            \
+          "[    input ] ", input, "\n",                                                   \
+          "[    query ] ", #lhs, "\n",                                                    \
+          "[    value ] ", lhs, "\n",                                                     \
+          "[ expected ] " #FUN " ", rhs, "\n"                                              \
+          );                                                                              \
+    }                                                                                     \
+  }
+
+#define TEST_CMP(lhs, OP, rhs)                                                            \
+  [=](auto input, LiraTerm<C>& result) -> std::optional<std::string> {                    \
+    if(lhs OP rhs)  {                                                                     \
+      return std::optional<std::string>();                                                \
+    } else {                                                                              \
+      return output_to_string(                                                            \
+          "[    input ] ", input, "\n",                                                   \
+          "[    query ] ", #lhs, "\n",                                                    \
+          "[    value ] ", lhs, "\n",                                                     \
+          "[ expected ] " #OP " ", rhs, "\n"                                              \
+          );                                                                              \
     }                                                                                     \
   }
 
@@ -385,6 +484,339 @@ struct VirasTest : Viras<C> {
         })
 
 
+    for (auto t : const_terms) {
+      for (auto lit : { t > 0, neq(t, 0), eq(t, 0), t >= 0 }) {
+        DEF_TEST(breaks_lra_case_01, 
+            ElimSetTest {
+              .conj = { lit }, 
+              .expected = containsAll( -infty ), 
+            })
+      }
+    }
+
+    {
+      struct LinearTermTest {
+        Term<C> term;
+        Term<C> zero;
+      };
+      std::vector<LinearTermTest> lra_tests = {
+            LinearTermTest 
+            { .term = x + a        
+            , .zero = -a             }
+          , LinearTermTest 
+            { .term = 2 * x + a    
+            , .zero = -frac(1,2) * a }
+          , LinearTermTest 
+            { .term = x + floor(x) + a + floor(x) - 2*floor(x)
+            , .zero = -a             }
+          };
+
+      for (auto t : lra_tests) {
+
+        DEF_TEST(breaks_lra_case_02, 
+            ElimSetTest {
+              .conj = { neq(t.term, 0) }, 
+              .expected = set_equal( -infty, t.zero + epsilon ), 
+            })
+
+        DEF_TEST(breaks_lra_case_02, 
+            ElimSetTest {
+              .conj = { neq(-t.term, 0) }, 
+              .expected = set_equal( -infty, t.zero + epsilon ), 
+            })
+
+        DEF_TEST(breaks_lra_case_03, 
+            ElimSetTest {
+              .conj = { eq(t.term, 0) }, 
+              .expected = set_equal( t.zero ), 
+            })
+
+        DEF_TEST(breaks_lra_case_03, 
+            ElimSetTest {
+              .conj = { eq(-t.term, 0) }, 
+              .expected = set_equal( t.zero ), 
+            })
+
+        DEF_TEST(breaks_lra_case_04, 
+            ElimSetTest {
+              .conj = { t.term >= 0 }, 
+              .expected = set_equal( t.zero ), 
+            })
+
+        DEF_TEST(breaks_lra_case_04, 
+            ElimSetTest {
+              .conj = { t.term > 0 }, 
+              .expected = set_equal( t.zero + epsilon ), 
+            })
+
+
+        DEF_TEST(breaks_lra_case_04, 
+            ElimSetTest {
+              .conj = { -t.term >= 0 }, 
+              .expected = set_equal( -infty ), 
+            })
+
+        DEF_TEST(breaks_lra_case_04, 
+            ElimSetTest {
+              .conj = { -t.term > 0 }, 
+              .expected = set_equal( -infty ), 
+            })
+
+        DEF_TEST(analsis_test_pos,
+            TermAnalysisTest {
+              .term =  t.term,
+              .expected = allPass( TEST_EQ(result.zero(term(0)), t.zero)
+                                 , TEST_EQ(result.distYminus, -result.sslp * x + t.term )
+                                 , TEST_EQ(result.deltaY    ,  0)
+                                 , TEST_EQ(result.breaks    , breakSet())
+                                 , TEST_GT(result.sslp    , 0)
+                                 )
+            })
+
+        DEF_TEST(analsis_test_neg,
+            TermAnalysisTest {
+              .term =  -t.term,
+              .expected = allPass( TEST_EQ(result.zero(term(0)), t.zero)
+                                 , TEST_EQ(result.distYminus, -result.sslp * x - t.term )
+                                 , TEST_EQ(result.deltaY    ,  0)
+                                 , TEST_EQ(result.breaks    , breakSet())
+                                 , TEST_LT(result.sslp    , 0)
+                                 )
+            })
+
+      }
+    }
+
+
+    auto vt = [](auto& xs) { return iter::array(xs) | iter::map([](auto* t) { return VirtualTerm<C>(*t); }); };
+    auto plus_epsilon = [&](auto& xs) { return vt(xs) | iter::map([](auto x) { return x + epsilon; }); };
+    {
+      struct PeriodicNonZeroSlopeTermTest {
+        Term<C> term;
+        std::vector<Break<C>> breaks;
+        std::vector<Break<C>> zeros;
+      };
+      std::vector<PeriodicNonZeroSlopeTermTest> lira_tests = {
+        { .term = x - floor(x)
+        , .breaks = breakSet(numeral(0) + Z(1))
+        , .zeros  = breakSet(numeral(0) + Z(1))
+        },
+        { .term = x - floor(x) - a
+        , .breaks = breakSet(numeral(0) + Z(1))
+        , .zeros  = breakSet(        a  + Z(1))
+        },
+        { .term = x - floor(x) - frac(0,5)
+        , .breaks = breakSet(numeral(0)   + Z(1))
+        , .zeros  = breakSet(  frac(0,5)  + Z(1))
+        },
+        { .term = x - frac(1,2) * floor(2 * x) - a
+        , .breaks = breakSet(numeral(0)   + Z(1,2))
+        , .zeros  = breakSet(        a    + Z(1,2))
+        },
+        { .term = 2 * x - floor(2 * x) - a
+        , .breaks = breakSet(numeral(0)    + Z(1,2))
+        , .zeros  = breakSet(frac(1,2) * a + Z(1,2))
+        },
+        { .term = 2 * x - floor(2 * x + b) - a
+        , .breaks = breakSet(-frac(1,2) * b + Z(1,2))
+        , .zeros  = breakSet(frac(1,2) * a + Z(1,2))
+        },
+        { .term = x + floor(x - a) + floor(-2 * x + 2 * b)
+        , .breaks = breakSet(a + Z(1), b + Z(1,2))
+        , .zeros  = breakSet( 1 + floor(2 * a + -2 * b) + Z(1)
+                            , 1 - floor(-a + b) + Z(1,2) )
+        },
+      };
+      for (auto t : lira_tests) {
+
+
+        DEF_TEST(non_linear_case_1, 
+            TermAnalysisTest {
+              .term =  t.term,
+              .expected = allPass( TEST_CMP(result.oslp, ==, 0)
+                                 , TEST_CMP(result.sslp, > , 0)
+                                 , TEST_CMP(result.breaks, ==,  t.breaks)
+                                 )
+            })
+
+
+        DEF_TEST(non_linear_case_1, 
+            TermAnalysisTest {
+              .term =  -t.term,
+              .expected = allPass( TEST_CMP(result.oslp, ==, 0)
+                                 , TEST_CMP(result.sslp, < , 0)
+                                 , TEST_CMP(result.breaks, ==,  t.breaks)
+                                 )
+            })
+
+
+        DEF_TEST(non_linear_case_1_pos_sslp_gt, 
+            ElimSetTest {
+              .conj = { t.term > 0 }, 
+              .expected = set_equal( 
+                  iter::concat( plus_epsilon(t.breaks)
+                              , plus_epsilon(t.zeros) 
+                              , vt(t.breaks)) 
+                  | iter::collect_vec
+               ), 
+            })
+
+        // >=
+
+        DEF_TEST(non_linear_case_1_pos_sslp_geq,
+            ElimSetTest {
+              .conj = { t.term >= 0 }, 
+              .expected = set_equal( 
+                  iter::concat( plus_epsilon(t.breaks)
+                              , vt(t.zeros) 
+                              , vt(t.breaks)) 
+                  | iter::collect_vec
+               ), 
+            })
+
+        DEF_TEST(non_linear_case_1_neg_sslp_geq,
+            ElimSetTest {
+              .conj = { -t.term >= 0 }, 
+              .expected = set_equal( 
+                  iter::concat( plus_epsilon(t.breaks)
+                              , vt(t.breaks)
+                              ) 
+                  | iter::collect_vec
+               ), 
+            })
+
+        // > 
+        DEF_TEST(non_linear_case_1_pos_sslp_gt,
+            ElimSetTest {
+              .conj = { t.term > 0 }, 
+              .expected = set_equal( 
+                  iter::concat( plus_epsilon(t.breaks)
+                              , plus_epsilon(t.zeros) 
+                              , vt(t.breaks)
+                              ) 
+                  | iter::collect_vec
+               ), 
+            })
+
+
+
+        DEF_TEST(non_linear_case_1_neg_sslp_gt,
+            ElimSetTest {
+              .conj = { -t.term > 0 }, 
+              .expected = set_equal( 
+                  iter::concat( plus_epsilon(t.breaks)
+                              , vt(t.breaks)
+                              ) 
+                  | iter::collect_vec
+               ), 
+            })
+
+        // ==
+
+        DEF_TEST(non_linear_case_1_pos_sslp_eq,
+            ElimSetTest {
+              .conj = { eq(t.term, 0) }, 
+              .expected = set_equal( 
+                  iter::concat( vt(t.zeros)
+                              , vt(t.breaks)) 
+                  | iter::collect_vec
+               ), 
+            })
+
+
+        DEF_TEST(non_linear_case_1_neg_sslp_eq,
+            ElimSetTest {
+              .conj = { eq(-t.term, 0) }, 
+              .expected = set_equal( 
+                  iter::concat( vt(t.zeros)
+                              , vt(t.breaks)) 
+                  | iter::collect_vec
+               ), 
+            })
+
+
+        // !=
+
+        DEF_TEST(non_linear_case_1_pos_sslp_neq,
+            ElimSetTest {
+              .conj = { neq(t.term, 0) }, 
+              .expected = set_equal( 
+                  iter::concat( plus_epsilon(t.breaks)
+                              , plus_epsilon(t.zeros)
+                              , vt(t.breaks)) 
+                  | iter::collect_vec
+               ), 
+            })
+
+
+        DEF_TEST(non_linear_case_1_neg_sslp_neq,
+            ElimSetTest {
+              .conj = { neq(-t.term, 0) }, 
+              .expected = set_equal( 
+                  iter::concat( plus_epsilon(t.breaks)
+                              , plus_epsilon(t.zeros)
+                              , vt(t.breaks)) 
+                  | iter::collect_vec
+               ), 
+            })
+
+      }
+
+    }
+
+    {
+      struct PeriodicZeroSlopeTermTest {
+        Term<C> term;
+        std::vector<Break<C>> breaks;
+      };
+      std::vector<PeriodicZeroSlopeTermTest> lira_tests = {
+        { .term = floor(x) - floor(x - a),
+          .breaks = breakSet(numeral(0) + Z(1), a + Z(1)), },
+
+        { .term = frac(1,2) * x + floor(x) + x - floor(x - a) - frac(3,2) * x,
+          .breaks = breakSet(numeral(0) + Z(1), a + Z(1)), },
+
+        { .term = 2 * floor(frac(1,2) * x) - floor(x - a),
+          .breaks = breakSet(numeral(0) + Z(2), a + Z(1)), },
+
+        { .term = b + floor(x) - floor(x - a),
+          .breaks = breakSet(numeral(0) + Z(1), a + Z(1)), },
+
+        { .term = floor(3 * (x - a)) - floor(x - b) - floor(2 * (x - c)),
+          .breaks = breakSet(a + Z(1,3), b + Z(1), c + Z(1,2)), },
+
+      };
+
+      for (auto& t : lira_tests) {
+
+        DEF_TEST(non_linear_case_2, 
+            TermAnalysisTest {
+              .term =  t.term,
+              .expected = allPass( TEST_CMP(result.oslp, ==, 0)
+                                 , TEST_CMP(result.sslp, ==, 0)
+                                 , TEST_F(is_set_equal, result.breaks, t.breaks)
+                                 )
+            })
+
+
+        DEF_TEST(non_linear_case_2_eq, 
+            ElimSetTest {
+              .conj = { t.term > 0 }, 
+              .expected = set_equal( 
+                  iter::concat( plus_epsilon(t.breaks)
+                              , vt(t.breaks)) 
+                  | iter::collect_vec
+               ), 
+            })
+
+
+
+      }
+    }
+
+
+    // TODO aperiodic tests systematically testing all cases
+
     //////////////////////////////////////////////////////////////////////////////////////
     // term property tests
     //////////////////////////////////////////////////////////////////////////////////////
@@ -459,6 +891,7 @@ struct VirasTest : Viras<C> {
               , TEST_EQ(result.deltaX(), numeral(1))
               ),
         })
+
 
     return tests;
   }
