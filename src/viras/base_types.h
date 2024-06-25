@@ -6,7 +6,6 @@
 
 namespace viras {
 
-
   template<class C, class T>
   struct WithConfig { 
     C* config; 
@@ -14,12 +13,6 @@ namespace viras {
 
     friend bool operator!=(WithConfig l, WithConfig r) 
     { return !(l == r); }
-
-    friend std::ostream& operator<<(std::ostream& out, WithConfig const& self)
-    { 
-      self.config->output(out, self.inner);
-      return out;
-    }
 
     DERIVE_TUPLE(WithConfig, inner)
     DERIVE_TUPLE_EQ
@@ -32,7 +25,8 @@ namespace viras {
   // template<class C> using Literals = typename C::Literals;
   // template<class C> using Numeral  = typename C::Numeral;
   // template<class C> using Literals = typename C::Literals;
-  template<class C> struct Term    : public WithConfig<C, typename C::Term   > {};
+
+  template<class C> struct Term    : public WithConfig<C, typename C::Term   > { };
   template<class C> struct Numeral : public WithConfig<C, typename C::Numeral> {};
   template<class C> struct Var     : public WithConfig<C, typename C::Var    > {};
   template<class C> struct Literal : public WithConfig<C, typename C::Literal> {
@@ -53,6 +47,17 @@ namespace viras {
     }
   };
 
+#define FWD_OUTPUT_OPERATOR(Type, api_call)                                               \
+  template<class C>                                                                       \
+  std::ostream& operator<<(std::ostream& out, Type<C> const& self)                        \
+  { self.config->api_call(out, self.inner); return out; }                                 \
+
+  FWD_OUTPUT_OPERATOR(Literals, output_literals)
+  FWD_OUTPUT_OPERATOR(Literal , output_literal )
+  FWD_OUTPUT_OPERATOR(Term    , output_term    )
+  FWD_OUTPUT_OPERATOR(Var     , output_var     )
+  FWD_OUTPUT_OPERATOR(Numeral , output_numeral )
+
   template<class C>
   Term<C> to_term(Var<C> n) 
   { return Term<C> { n.config, n.config->term(n.inner), }; }
@@ -71,7 +76,6 @@ namespace viras {
 
 
   namespace sugar {
-
 
     ///////////////////////////////////////
     // PRIMARY OPERATORS
@@ -117,7 +121,7 @@ namespace viras {
     // INTERDEFINED OPERATORS
     ///////////////////////////////////////
 
-#define __VIRAS__DEF_MINUS(CType)                                                                  \
+#define __VIRAS__DEF_MINUS(CType)                                                         \
     template<class C>                                                                     \
     CType operator-(CType const& x)                                                       \
     { return to_numeral(x.config, -1) * x; }                                              \
@@ -142,41 +146,41 @@ namespace viras {
     // LIFTED OPERATORS
     ///////////////////////////////////////
 
-#define __VIRAS__LIFT_NUMERAL_TO_TERM_L(fn)                                                        \
+#define __VIRAS__LIFT_NUMERAL_TO_TERM_L(fn)                                               \
     template<class C>                                                                     \
     auto fn(Numeral<C> const& lhs, Term<C> const& rhs)                                    \
     { return fn(to_term(lhs), rhs); }
 
-#define __VIRAS__LIFT_NUMERAL_TO_TERM_R(fn)                                                        \
+#define __VIRAS__LIFT_NUMERAL_TO_TERM_R(fn)                                               \
     template<class C>                                                                     \
     auto fn(Term<C> const& lhs, Numeral<C> const& rhs)                                    \
     { return fn(lhs, to_term(rhs)); }
 
-#define __VIRAS__LIFT_NUMERAL_TO_TERM(fn)                                                          \
-    __VIRAS__LIFT_NUMERAL_TO_TERM_L(fn)                                                            \
-    __VIRAS__LIFT_NUMERAL_TO_TERM_R(fn)                                                            \
+#define __VIRAS__LIFT_NUMERAL_TO_TERM(fn)                                                 \
+    __VIRAS__LIFT_NUMERAL_TO_TERM_L(fn)                                                   \
+    __VIRAS__LIFT_NUMERAL_TO_TERM_R(fn)                                                   \
 
     __VIRAS__LIFT_NUMERAL_TO_TERM(operator+)
     __VIRAS__LIFT_NUMERAL_TO_TERM(operator-)
 
-#define __VIRAS__LIFT_INT_TO_NUMERAL(function, CType)                                              \
-    __VIRAS__LIFT_INT_TO_NUMERAL_L(function, CType)                                                \
-    __VIRAS__LIFT_INT_TO_NUMERAL_R(function, CType)                                                \
+#define __VIRAS__LIFT_INT_TO_NUMERAL(function, CType)                                     \
+    __VIRAS__LIFT_INT_TO_NUMERAL_L(function, CType)                                       \
+    __VIRAS__LIFT_INT_TO_NUMERAL_R(function, CType)                                       \
 
 
-#define __VIRAS__LIFT_INT_TO_NUMERAL_L(function, CType)                                            \
+#define __VIRAS__LIFT_INT_TO_NUMERAL_L(function, CType)                                   \
     template<class C>                                                                     \
     auto function(int lhs, CType rhs)                                                     \
     { return function(Numeral<C> {rhs.config, rhs.config->numeral(lhs)}, rhs); }          \
 
-#define __VIRAS__LIFT_INT_TO_NUMERAL_R(function, CType)                                            \
+#define __VIRAS__LIFT_INT_TO_NUMERAL_R(function, CType)                                   \
     template<class C>                                                                     \
     auto function(CType lhs, int rhs)                                                     \
     { return function(lhs, Numeral<C> {lhs.config, lhs.config->numeral(rhs)}); }          \
 
-#define __VIRAS__LIFT_INT_TO_NUMERAL(function, CType)                                              \
-    __VIRAS__LIFT_INT_TO_NUMERAL_L(function, CType)                                                \
-    __VIRAS__LIFT_INT_TO_NUMERAL_R(function, CType)                                                \
+#define __VIRAS__LIFT_INT_TO_NUMERAL(function, CType)                                     \
+    __VIRAS__LIFT_INT_TO_NUMERAL_L(function, CType)                                       \
+    __VIRAS__LIFT_INT_TO_NUMERAL_R(function, CType)                                       \
 
     __VIRAS__LIFT_INT_TO_NUMERAL(operator+, Numeral<C>)
     __VIRAS__LIFT_INT_TO_NUMERAL(operator-, Numeral<C>)
@@ -193,8 +197,6 @@ namespace viras {
     __VIRAS__LIFT_INT_TO_NUMERAL(operator-, Term<C>)
     __VIRAS__LIFT_INT_TO_NUMERAL_L(operator*, Term<C>)
 
-
-     // MULTIPLICATION
      // DIVISION
 
     template<class C>
@@ -209,7 +211,7 @@ namespace viras {
 
     __VIRAS__LIFT_INT_TO_NUMERAL_R(operator/, Term<C>)
 
-#define __VIRAS__LITERAL_CONSTRUCTION_OPERATOR(fn, Sym)                                            \
+#define __VIRAS__LITERAL_CONSTRUCTION_OPERATOR(fn, Sym)                                   \
     template<class C>                                                                     \
     Literal<C> fn(Term<C> lhs, Term<C> rhs)                                               \
     {                                                                                     \
@@ -217,8 +219,8 @@ namespace viras {
       return Literal<C> { lhs.config, lhs.config->create_literal((lhs - rhs).inner, Sym) }; \
     }                                                                                     \
                                                                                           \
-    __VIRAS__LIFT_NUMERAL_TO_TERM(fn)                                                              \
-    __VIRAS__LIFT_INT_TO_NUMERAL(fn, Term<C>)                                                      \
+    __VIRAS__LIFT_NUMERAL_TO_TERM(fn)                                                     \
+    __VIRAS__LIFT_INT_TO_NUMERAL(fn, Term<C>)                                             \
 
     __VIRAS__LITERAL_CONSTRUCTION_OPERATOR(operator> , PredSymbol::Gt);
     __VIRAS__LITERAL_CONSTRUCTION_OPERATOR(operator>=, PredSymbol::Geq);
@@ -294,7 +296,7 @@ namespace viras {
       [&](auto l, auto r) { return if_mul(Numeral<C> {t.config, l},Term<C>{t.config, r}); }, 
       [&](auto l, auto r) { return if_add(Term<C>{t.config, l},Term<C>{t.config, r}); }, 
       [&](auto x) { return if_floor(Term<C>{t.config, x}); }
-         );
+    );
   }
 
 
@@ -307,6 +309,5 @@ namespace viras {
       /* l + r */     [&](auto l, auto r) { return subs(l,var,by) + subs(r,var,by); }, 
       /* floor */     [&](auto t)         { return floor(subs(t,var,by)); });
   }
-
 
 } // namespace viras

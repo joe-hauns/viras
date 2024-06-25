@@ -46,12 +46,11 @@ namespace viras {
     Numeral num(Numeral l)            { return api.num(l); }
     Numeral den(Numeral l)            { return api.den(l); }
 
-    void output(std::ostream& out, Literals const& x) { api.output(out, x); }
-    // TODO fix this
-    // void output(std::ostream& out, Literal const& x)  { api.output(out, x); }
-    void output(std::ostream& out, Var const& x)      { api.output(out, x); }
-    void output(std::ostream& out, Term const& x)     { api.output(out, x); }
-    void output(std::ostream& out, Numeral const& x)  { api.output(out, x); }
+    void output_literals(std::ostream& out, Literals const& x) { api.output_literals(out, x); }
+    void output_literal (std::ostream& out, Literal const& x)  { api.output_literal (out, x); }
+    void output_var     (std::ostream& out, Var const& x)      { api.output_var(out, x); }
+    void output_term    (std::ostream& out, Term const& x)     { api.output_term(out, x); }
+    void output_numeral (std::ostream& out, Numeral const& x)  { api.output_numeral(out, x); }
 
     Term term(Numeral n)                                { return api.term(n); }
     Term term(Var v)                                    { return api.term(v); }
