@@ -16,7 +16,10 @@ namespace viras {
     { return !(l == r); }
 
     friend std::ostream& operator<<(std::ostream& out, WithConfig const& self)
-    { return out << output::ptr(self.inner); }
+    { 
+      self.config->output(out, self.inner);
+      return out;
+    }
 
     DERIVE_TUPLE(WithConfig, inner)
     DERIVE_TUPLE_EQ
