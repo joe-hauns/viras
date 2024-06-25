@@ -8,7 +8,7 @@
 #include "viras/derive.h"
 #include "viras/predicate.h"
 #include "viras/virtual_term.h"
-#include "viras/lira_term.h"
+#include "viras/lira_literal.h"
 #include "viras/break.h"
 
 
@@ -16,6 +16,7 @@ namespace viras {
 
 
   template<class C
+    // TODO move around the boolean optimization configuration
     , bool optimizeBounds = true
     , bool optimizeGridIntersection = false
     >
@@ -25,45 +26,12 @@ namespace viras {
     friend class VirasTest;
 
     C _config;
-  public:
-
-    Viras(C c) : _config(std::move(c)) { };
-
-    ~Viras() {};
 
     static constexpr Infty infty { .positive = true, };
-
 
     ZComp<C> Z(Numeral<C> n) { return ZComp<C>(n); }
     ZComp<C> Z(int n) { return ZComp<C>(numeral(n)); }
     ZComp<C> Z(int n, int m) { return ZComp<C>(numeral(n) / m); }
-
-    struct LiraLiteral {
-      LiraTerm<C> term;
-      PredSymbol symbol;
-
-      bool lim_pos_inf() const { return lim_inf(/* pos */ true); }
-      bool lim_neg_inf() const { return lim_inf(/* pos */ false); }
-      bool periodic() const { return term.periodic(); }
-
-      bool lim_inf(bool positive) const
-      { 
-        VIRAS_ASSERT(term.oslp != 0);
-        switch (symbol) {
-        case PredSymbol::Gt:
-        case PredSymbol::Geq: return positive ? term.oslp > 0 
-                                              : term.oslp < 0;
-        case PredSymbol::Neq: return true;
-        case PredSymbol::Eq: return false;
-        }
-      }
-
-      bool lim(Infty i) const
-      { return lim_inf(i.positive); }
-
-      friend std::ostream& operator<<(std::ostream& out, LiraLiteral const& self)
-      { return out << self.term << " " << self.symbol << " 0"; }
-    };
 
     Numeral<C> numeral(int i)  { return Numeral<C> { &_config, _config.numeral(i)}; }
     Term<C>    term(Numeral<C> n) { return Term<C>    { &_config, _config.term(n.inner) }; }
@@ -72,17 +40,23 @@ namespace viras {
 
     Var<C> test_var(const char* name) { return Var<C> { &_config, _config.test_var(name) }; }
 
-    // TODO get rid of implicit copies of LiraTerm
+
+  public:
+    Viras(C c) : _config(std::move(c)) { };
+
+    ~Viras() {};
+
+        // TODO get rid of implicit copies of LiraTerm
     // TODO make it possible to fail gracefully with uniterpreted stuff
     // TODO get rid of this?
     static LiraTerm<C> analyse(Term<C> self, Var<C> x) { return LiraTerm<C>::analyse(self,x); }
 
-    LiraLiteral analyse(Literal<C> self, Var<C> x) 
-    { return LiraLiteral { analyse(self.term(), x), self.symbol() }; }
+    LiraLiteral<C> analyse(Literal<C> self, Var<C> x) 
+    { return LiraLiteral<C> { analyse(self.term(), x), self.symbol() }; }
 
-    std::vector<LiraLiteral> analyse(Literals<C> const& self, Var<C> x) 
+    std::vector<LiraLiteral<C>> analyse(Literals<C> const& self, Var<C> x) 
     { 
-      std::vector<LiraLiteral> out;
+      std::vector<LiraLiteral<C>> out;
       iter::array(self) 
         | iter::map([&](auto lit) { return analyse(lit, x); })
         | iter::foreach([&](auto lit) { return out.push_back(std::move(lit)); });
@@ -90,12 +64,12 @@ namespace viras {
     }
 
 
-    std::vector<LiraLiteral> analyse(typename C::Literals const& self, typename C::Var x) 
+    std::vector<LiraLiteral<C>> analyse(typename C::Literals const& self, typename C::Var x) 
     { return analyse(Literals<C> { &_config, self }, Var<C> { &_config, x }); }
 
     static constexpr Epsilon epsilon;
 
-    auto elim_set(Var<C> x, LiraLiteral const& lit)
+    auto elim_set(Var<C> x, LiraLiteral<C> const& lit)
     {
       auto& t = lit.term;
       auto symbol = lit.symbol;
@@ -155,13 +129,13 @@ namespace viras {
                                  | iter_dbg(1, "eseg")
                        ; };
                        auto ebound_plus  = [&]() { return 
-                           iter::if_then_(lit.lim_pos_inf(), iter::vals<VT>(t.distXplus(), t.distXplus() + epsilon))
+                           iter::if_then_(lit.lim(infty), iter::vals<VT>(t.distXplus(), t.distXplus() + epsilon))
                                  else____(                   iter::vals<VT>(t.distXplus()                         ))
                                  | iter_dbg(1, "ebound_plus")
                                  ; };
 
                        auto ebound_minus = [&]() { return 
-                           iter::if_then_(lit.lim_neg_inf(), iter::vals<VT>(t.distXminus(), -infty))
+                           iter::if_then_(lit.lim(-infty), iter::vals<VT>(t.distXminus(), -infty))
                                  else____(                   iter::vals<VT>(t.distXminus()        ))
                                  | iter_dbg(1, "ebound_minus")
                        ; };
@@ -172,7 +146,7 @@ namespace viras {
 
     }
 
-    auto elim_set(Var<C> x, std::vector<LiraLiteral> const& lits)
+    auto elim_set(Var<C> x, std::vector<LiraLiteral<C>> const& lits)
     { return iter::array(lits)
         | iter::flat_map([&](auto lit) { return elim_set(x, *lit); }); }
 
@@ -181,7 +155,7 @@ namespace viras {
 
     Literal<C> literal(bool b) { return literal(term(0), b ? PredSymbol::Eq : PredSymbol::Neq); }
 
-    Literal<C> vsubs_aperiodic0(LiraLiteral const& lit, Var<C> x, VirtualTerm<C> vt) {
+    Literal<C> vsubs_aperiodic0(LiraLiteral<C> const& lit, Var<C> x, VirtualTerm<C> vt) {
       auto impl = [&]() {
 
       auto& s = lit.term;
@@ -196,7 +170,7 @@ namespace viras {
           }
           return vsubs_aperiodic0(lit, x, vt);
         } else {
-          return literal(lit.lim_inf(vt.infty->positive));
+          return literal(lit.lim(*vt.infty));
         }
       } else if (vt.epsilon) {
         switch(symbol) {
@@ -229,14 +203,14 @@ namespace viras {
     }
 
 
-    auto vsubs_aperiodic1(std::vector<LiraLiteral> const& lits, Var<C> x, VirtualTerm<C> term) {
+    auto vsubs_aperiodic1(std::vector<LiraLiteral<C>> const& lits, Var<C> x, VirtualTerm<C> term) {
       VIRAS_ASSERT(!term.period);
           /* case 2 */
       return iter::array(lits) 
         | iter::map([this, x, term](auto lit) { return vsubs_aperiodic0(*lit, x, term); });
     }
 
-    auto vsubs(std::vector<LiraLiteral> const& lits, Var<C> x, VirtualTerm<C> vt) {
+    auto vsubs(std::vector<LiraLiteral<C>> const& lits, Var<C> x, VirtualTerm<C> vt) {
       return iter::if_then_(vt.period, ([&](){
                               /* case 1 */
                               auto A = [&lits]() { return iter::array(lits) | iter::filter([](auto l) { return !l->periodic(); }); };
@@ -256,7 +230,7 @@ namespace viras {
                                 return iGrid(Bound::Closed, *vt.term, lambda, Bound::Open) 
                                      | iter::map([&](auto s) { return s + inf; });
                               };
-                              std::optional<LiraLiteral const*> aperiodic_equality;
+                              std::optional<LiraLiteral<C> const*> aperiodic_equality;
                               auto aperiodic_equality_exists = [&]() -> bool { 
                                 aperiodic_equality = A()
                                                    | iter::filter([](auto l) { return l->symbol == PredSymbol::Eq; })
@@ -283,7 +257,7 @@ namespace viras {
                        }()));
     }
 
-    auto quantifier_elimination(Var<C> x, std::vector<LiraLiteral> const& lits)
+    auto quantifier_elimination(Var<C> x, std::vector<LiraLiteral<C>> const& lits)
     {
       return elim_set(x, lits)
         | iter::dedup()
@@ -293,13 +267,13 @@ namespace viras {
 
     auto quantifier_elimination(typename C::Var x, Literals<C> const& ls)
     {
-      auto lits = std::make_unique<std::vector<LiraLiteral>>(analyse(ls, x));
+      auto lits = std::make_unique<std::vector<LiraLiteral<C>>>(analyse(ls, x));
       return quantifier_elimination(Var<C> { &_config, x }, *lits)
         | iter::inspect([ /* we store the pointer to the literals in this closure */ lits = std::move(lits)](auto) { })
         | iter::map([&](auto lits) { return std::move(lits) | iter::map([](auto lit) { return lit.inner; }); });
     }
 
-    auto quantifier_elimination(typename C::Var x, std::vector<LiraLiteral> const& lits)
+    auto quantifier_elimination(typename C::Var x, std::vector<LiraLiteral<C>> const& lits)
     {
       return quantifier_elimination(Var<C> { &_config, x }, lits)
         | iter::map([&](auto lits) { return std::move(lits) | iter::map([](auto lit) { return lit.inner; }); });
