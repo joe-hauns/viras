@@ -53,7 +53,6 @@ namespace viras {
         | iter::collect_vec;
     }
 
-
     std::vector<LiraLiteral<C>> analyse(typename C::Literals const& self, typename C::Var x) 
     { return analyse(Literals<C> { &_config, self }, Var<C> { &_config, x }); }
 
@@ -247,7 +246,6 @@ namespace viras {
                        }()));
     }
 
-  private:
     auto quantifier_elimination(Var<C> x, std::vector<LiraLiteral<C>> const& lits)
     {
       return elim_set(x, lits)
@@ -259,10 +257,10 @@ namespace viras {
   public:
     auto quantifier_elimination(typename C::Var x, typename C::Literals ls)
     {
-      // TODO turn shared into unique ptr
-      auto lits = std::make_shared<std::vector<LiraLiteral<C>>>(analyse(ls, x));
-      return quantifier_elimination(Var<C> { &_config, x }, *lits)
-        | iter::inspect([ /* we store the pointer to the literals in this closure */ lits = std::move(lits)](auto) { })
+      auto lits = std::make_unique<std::vector<LiraLiteral<C>>>(analyse(ls, x));
+      auto lits_ptr = lits.get();
+      return quantifier_elimination(Var<C> { &_config, x }, *lits_ptr)
+        | iter::store_value(std::move(lits))
         | iter::map([&](auto lits) { return std::move(lits) | iter::map([](auto lit) { return lit.inner; }); });
     }
 

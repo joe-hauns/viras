@@ -30,7 +30,7 @@ namespace viras {
 
       template<class Op2>
       auto compose(IterCombinator<Op2> other) {
-        return iterCombinator([self = std::move(this->self), other = std::move(other)](auto iter){ return (other.self)((self)(std::move(iter))); });
+        return iterCombinator([self = std::move(this->self), other = std::move(other)](auto iter) mutable { return (other.self)((self)(std::move(iter))); });
       }
     };
 
@@ -144,7 +144,8 @@ namespace viras {
     struct MapIter {
       I i;
       F f;
-      auto next() -> decltype(auto) { 
+      auto next() -> decltype(auto) 
+      {
         auto next = i.next();
         return next ? std::optional<decltype(f(*next))>(f(*next))
                     : std::optional<decltype(f(*next))>();
@@ -152,7 +153,7 @@ namespace viras {
     };
 
     constexpr auto map = [](auto f) {
-      return iterCombinator([f = std::move(f)](auto i) {
+      return iterCombinator([f = std::move(f)](auto i) mutable {
         return MapIter<decltype(i), decltype(f)>{std::move(i),std::move(f)};
       });
     };
@@ -272,11 +273,15 @@ namespace viras {
 
     template<class F>
     auto inspect(F f) {
-      return map([f = std::move(f)](auto x) {
+      return map([f = std::move(f)](auto x) mutable {
           f(x);
           return std::move(x);
       });
     }
+
+    template<class V>
+    auto store_value(V v) 
+    { return inspect([v = std::move(v)](auto&) mutable { }); }
 
 #define iter_dbg(lvl, ...) ::viras::iter::inspect([=](auto x) { VIRAS_LOG(lvl, __VA_ARGS__, ": ", output::ptr(x)); })
     template<class M>
