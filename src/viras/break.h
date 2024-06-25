@@ -36,7 +36,7 @@ namespace viras {
       };
     }();
     VIRAS_ASSERT(k != 0 || (l == Bound::Closed && r == Bound::Closed));
-    return iter::if_then_(C::optimizeGridIntersection && k == 0, iter::vals(start))
+    return iter::if_then_(t.config->opts.optimizeGridIntersection() && k == 0, iter::vals(start))
                  else____(iter::nat_iter(to_numeral(t.config, 0))
                             | iter::take_while([r,p,k](auto n) -> bool { 
                                 switch(r) {

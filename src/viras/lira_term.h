@@ -151,7 +151,7 @@ namespace viras {
 
         /* floor t */ , [&](auto t, auto& rec)  {
           VIRAS_ASSERT(self.per != 0 || rec.per == 0);
-          return C::optimizeBounds 
+          return x.config->opts.optimizeBounds()
                ? (self.per == 0 ? to_numeral(0) : rec.deltaY + 1)
                :                                rec.deltaY + 1 ; 
         }
@@ -178,7 +178,7 @@ namespace viras {
         /* floor t */ , [&](auto t, auto& rec) 
         { 
           VIRAS_ASSERT(self.per != 0 || rec.per == 0);
-          return C::optimizeBounds 
+          return x.config->opts.optimizeBounds()
                ? (self.per == 0 ? floor(rec.distYminus) :  rec.distYminus - 1)
                :                                           rec.distYminus - 1 ; }
         );
@@ -282,7 +282,7 @@ namespace viras {
         // DEBUG_FIELD(per)
         // DEBUG_FIELD(deltaY)
 
-        if (C::optimizeBounds) {
+        if (x.config->opts.optimizeBounds()) {
           VIRAS_ASSERT(res.per != 0 || res.deltaY == 0);
         }
         VIRAS_ASSERT((res.per == 0) == (res.breaks.size() == 0));

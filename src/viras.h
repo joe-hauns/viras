@@ -14,7 +14,6 @@
 
 namespace viras {
 
-
   template<class C
     // TODO move around the boolean optimization configuration
     , bool optimizeBounds = true
@@ -42,6 +41,7 @@ namespace viras {
 
 
   public:
+    using Config = C;
     Viras(C c) : _config(std::move(c)) { };
 
     ~Viras() {};
@@ -119,6 +119,8 @@ namespace viras {
                                          
                                  | iter_dbg(1, "ezero")
                        ; };
+                       DBGE(t.sslp)
+                       DBGE(symbol)
                        auto eseg         = [&]() { 
                          return 
                            iter::if_then_(t.sslp == 0 || ( t.sslp < 0 && isIneq(symbol)), breaks_plus_epsilon())
@@ -281,8 +283,13 @@ namespace viras {
 
   };
 
-  template<class Config>
-  auto viras(Config c) { return Viras<Config>(std::move(c)); }
+  // template<class Config>
+  // auto viras(Config c) { return Viras<Config>(std::move(c)); }
+
+
+  template<class Api, class Opts = DefaultOpts>
+  auto viras(Api api, Opts opts = Opts())
+  { return Viras<Config<Api, Opts>>(Config<Api, Opts>(std::move(api), std::move(opts) )); }
 
 
 }

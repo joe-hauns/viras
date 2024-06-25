@@ -25,7 +25,8 @@ bool is_set_equal(std::vector<A> const& lhs, std::vector<A> const& rhs) {
 }
 
 template<class C>
-struct VirasTest : Viras<C> {
+struct VirasTest : Viras<C> 
+{
 
   template<class... As>
   VirasTest(As... as) : Viras<C>(as...) {}
@@ -164,33 +165,37 @@ struct VirasTest : Viras<C> {
     }
   }
 
-  void run_tests(std::regex regex) {
+  bool run_tests(std::regex regex) {
+    bool success = true;
     for (auto& testCase : tests()) {
       if (std::regex_match(testCase.first, regex)) {
-        run_test(testCase);
+        success &= run_test(testCase);
       }
     }
+    return success;
   }
 
   auto run_tests(const char* regex) { return run_tests(std::basic_regex(regex)); }
   auto run_test (const char* test)  { return run_test(std::string(test)); }
 
-  void run_test(std::string const& name){
+  bool run_test(std::string const& name){
+    auto success = true;
     for (auto& testCase : tests()) {
       if (testCase.first == name) {
-        run_test(testCase);
+        success &= run_test(testCase);
       }
     }
+    return success;
   }
 
 
-  void auto_test(){
+  bool auto_test(){
     if (std::getenv("VIRAS_TEST_NAME")) {
-      run_test(std::getenv("VIRAS_TEST_NAME"));
+      return run_test(std::getenv("VIRAS_TEST_NAME"));
     } else if (std::getenv("VIRAS_TEST_PATTERN")) {
-      run_tests(std::getenv("VIRAS_TEST_PATTERN"));
+      return run_tests(std::getenv("VIRAS_TEST_PATTERN"));
     } else {
-      run_tests(".*");
+      return run_tests(".*");
     }
   }
 
@@ -330,8 +335,14 @@ struct VirasTest : Viras<C> {
 
     DEF_TEST(floor_2, 
         ElimSetTest {
-          .conj = { eq(floor(x), x) },
-          .expected = containsAll( 0 + Z(1), term(0) + epsilon + Z(1) ),  // TODO do we really need eps and non-eps here
+          .conj = { floor(x) > x },
+          .expected = containsAll( 0 + Z(1), term(0) + epsilon + Z(1) ),  
+        })
+
+    DEF_TEST(floor_2_inv, 
+        ElimSetTest {
+          .conj = { x >= floor(x) },
+          .expected = containsAll( 0 + Z(1), term(0) + epsilon + Z(1) ),  
         })
 
     DEF_TEST(floor_3, 
@@ -897,5 +908,11 @@ struct VirasTest : Viras<C> {
   }
 
 };
+
+template<class Api>
+auto viras_test(Api api)
+{ return VirasTest<Config<Api, DefaultOpts>>(Config<Api, DefaultOpts>(std::move(api), DefaultOpts() )); }
+
+
 
 } // namespace viras
