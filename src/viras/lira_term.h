@@ -6,6 +6,13 @@
 
 namespace viras {
 
+  /** A lira term that has been processed and analysed to be used by the viras algorithm.
+   * It has been fully bottom-up tranversed using C::match ensuring that there are no unexpected
+   * symbols occurring in the term. It can be constructed using LiraTerm::analyse.
+   * 
+   * If the terms in your API may contain non-LIRA symbols you can throw an exception in the match
+   * implementation of your API. This exception will then be forwarded by analyse and you have to catch it and deal with it when you call LiraTerm::analyse.
+   */
   template<class C>
   struct LiraTerm 
   {
