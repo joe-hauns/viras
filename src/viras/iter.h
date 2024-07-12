@@ -283,7 +283,7 @@ namespace viras {
     auto store_value(V v) 
     { return inspect([v = std::move(v)](auto&) mutable { }); }
 
-#define iter_dbg(lvl, ...) ::viras::iter::inspect([=](auto x) { VIRAS_LOG(lvl, __VA_ARGS__, ": ", output::ptr(x)); })
+#define iter_dbg(lvl, ...) ::viras::iter::inspect([=](auto __iter_dbg_var) { VIRAS_LOG(lvl, __VA_ARGS__, ": ", output::ptr(__iter_dbg_var)); })
     template<class M>
     auto dbg(M msg) {
       return inspect([msg = std::move(msg)](auto x) { VIRAS_LOG(msg, ": ", outputPtr(x)); });

@@ -58,9 +58,10 @@ namespace viras {
 
     static constexpr Epsilon epsilon;
 
-    auto elim_set(Var<C> x, LiraLiteral<C> const& lit)
+    auto elim_set(Var<C> const& x, LiraLiteral<C> const& lit)
     {
       auto& t = lit.term;
+      // auto& x = t.x;
       auto symbol = lit.symbol;
       auto isIneq = [](auto symbol) { return (symbol == PredSymbol::Geq || symbol == PredSymbol::Gt); };
       using VT = VirtualTerm<C>;
@@ -72,7 +73,7 @@ namespace viras {
                                  else_if_(t.sslp < 0               , iter::vals<VT>(-infty))
                                  else_if_(symbol == PredSymbol::Geq, iter::vals<VT>(t.zero(term(0))))
                                  else_is_(symbol == PredSymbol::Gt , iter::vals<VT>(t.zero(term(0)) + epsilon))
-                                 | iter_dbg(1, "lra term")
+                                 | iter_dbg(1, "  lra term")
                                  )
 
                    else_is_(!t.breaks.empty(), [&]() {
@@ -85,7 +86,6 @@ namespace viras {
                                else____(iter::array(t.breaks)
                                           | iter::flat_map([&](auto* b) { return intersectGrid(*b, Bound::Open, t.distXminus(), t.deltaX(), Bound::Open); })
                                           | iter::map([](auto t) { return VT(t); }) )
-                       | iter_dbg(1, "ebreak")
                        ; };
 
                        auto breaks_plus_epsilon = [&]() { return ebreak() | iter::map([](auto vt) { return vt + epsilon; })
@@ -105,7 +105,6 @@ namespace viras {
                                            | iter::flat_map([&](auto* b) { return intersectGrid(Break<C>(t.zero(b->t), 1 - t.oslp / t.sslp),
                                                                                                 Bound::Open, t.distXminus(), t.deltaX(), Bound::Open); })
                                            | iter::map([&](auto t) { return VT(t); }))
-                                 | iter_dbg(1, "ezero")
                        ; };
                        auto eseg         = [&]() {
                          return
@@ -114,26 +113,25 @@ namespace viras {
                                  else_if_(t.sslp >  0 && symbol == PredSymbol::Gt , iter::concat(breaks_plus_epsilon(), ezero() | iter::map([](auto x) { return x + epsilon; })))
                                  else_if_(t.sslp != 0 && symbol == PredSymbol::Neq, iter::concat(breaks_plus_epsilon(), ezero() | iter::map([](auto x) { return x + epsilon; })))
                                  else_is_(t.sslp != 0 && symbol == PredSymbol::Eq,  ezero())
-                                 | iter_dbg(1, "eseg")
                        ; };
                        auto ebound_plus  = [&]() { return
                            iter::if_then_(lit.lim(infty), iter::vals<VT>(t.distXplus(), t.distXplus() + epsilon))
                                 else____(                   iter::vals<VT>(t.distXplus()                         ))
-                                 | iter_dbg(1, "ebound_plus")
                                  ; };
 
                        auto ebound_minus = [&]() { return
                            iter::if_then_(lit.lim(-infty), iter::vals<VT>(t.distXminus(), -infty))
                                  else____(                   iter::vals<VT>(t.distXminus()        ))
-                                 | iter_dbg(1, "ebound_minus")
                        ; };
 
-                       return iter::if_then_(t.periodic(), iter::concat(ebreak(), eseg()))
-                                    else____(              iter::concat(ebreak(), eseg(), ebound_plus(), ebound_minus()));
+#define _elem(elem) elem() | iter_dbg(1, "elimset (" #elem ") of ", x)
+                       return iter::if_then_(t.periodic(), iter::concat( _elem(ebreak), _elem(eseg)))
+                                    else____(              iter::concat( _elem(ebreak), _elem(eseg), _elem(ebound_plus), _elem(ebound_minus)));
+// #undef _elem
                    }());
     }
 
-    auto elim_set(Var<C> x, std::vector<LiraLiteral<C>> const& lits)
+    auto elim_set(Var<C> const& x, std::vector<LiraLiteral<C>> const& lits)
     { return iter::array(lits)
         | iter::flat_map([&](auto lit) { return elim_set(x, *lit); }); }
 
@@ -186,7 +184,7 @@ namespace viras {
       }
       };
       auto res = impl();
-      VIRAS_LOG(1, "substituting ( ", lit, " )[ ", x, " // ", vt, " ] = ", res)
+      VIRAS_LOG(2, "substituting ( ", lit, " )[ ", x, " // ", vt, " ] = ", res)
       return res;
     }
 
@@ -236,7 +234,7 @@ namespace viras {
                                           | iter::filter([&](auto L) { return L->lim(-infty) == false; })
                                           | iter::flat_map([lambda, iGrid](auto L) { return iGrid(Bound::Closed, L->term.distXminus(), L->term.deltaX() + lambda, Bound::Closed); })
                                           )
-                                         | iter_dbg(1, "fin");
+                                         | iter_dbg(2, "  fin");
                               return std::move(fin)
                               | iter::map([this,&lits,x](auto t) { return this->vsubs_aperiodic(lits, x, t); });
                             }()))
@@ -246,11 +244,11 @@ namespace viras {
                        }()));
     }
 
-    auto quantifier_elimination(Var<C> x, std::vector<LiraLiteral<C>> const& lits)
+    auto quantifier_elimination(Var<C> const& x, std::vector<LiraLiteral<C>> const& lits)
     {
       return elim_set(x, lits)
         | iter::dedup()
-        | iter_dbg(0, "elim set: ")
+        | iter_dbg(0, "elim set of ", x)
         | iter::flat_map([this,&lits,x](auto t) { return vsubs(lits, x, t); });
     }
 
@@ -259,8 +257,10 @@ namespace viras {
     {
       auto lits = std::make_unique<std::vector<LiraLiteral<C>>>(analyse(ls, x));
       auto lits_ptr = lits.get();
-      return quantifier_elimination(Var<C> { &_config, x }, *lits_ptr)
+      auto var = std::make_unique<Var<C>>(Var<C> { &_config, x });
+      return quantifier_elimination(*var, *lits_ptr)
         | iter::store_value(std::move(lits))
+        | iter::store_value(std::move(var))
         | iter::map([&](auto lits) { return std::move(lits) | iter::map([](auto lit) { return lit.inner; }); });
     }
 
