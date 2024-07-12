@@ -124,7 +124,7 @@ namespace viras {
                                  else____(                   iter::vals<VT>(t.distXminus()        ))
                        ; };
 
-#define _elem(elem) elem() | iter_dbg(1, "elimset (" #elem ") of ", x)
+#define _elem(elem) elem() | iter_dbg(0, "elimset (" #elem ") of ", x)
                        return iter::if_then_(t.periodic(), iter::concat( _elem(ebreak), _elem(eseg)))
                                     else____(              iter::concat( _elem(ebreak), _elem(eseg), _elem(ebound_plus), _elem(ebound_minus)));
 // #undef _elem
@@ -248,7 +248,6 @@ namespace viras {
     {
       return elim_set(x, lits)
         | iter::dedup()
-        | iter_dbg(0, "elim set of ", x)
         | iter::flat_map([this,&lits,x](auto t) { return vsubs(lits, x, t); });
     }
 
