@@ -3,22 +3,40 @@
 #include "viras/output.h"
 #include <set>
 #include <optional>
+#include <variant>
 #include <tuple>
 #include <vector>
 
 namespace viras {
    namespace iter {
 
-
   template<class T>
   T dummyVal();
+
+  template<class T>
+  struct is_option { static constexpr bool value = false; };
+
+  template<class T>
+  struct is_option<std::optional<T>> { static constexpr bool value = true; };
+
+  template<class I>
+  struct is_iter { 
+    
+    template<typename U> static char Test(std::enable_if<is_option<decltype(dummyVal<I>().next())>::value>*);
+    template<typename U> static int Test(...);
+    static constexpr bool value = std::is_same_v<decltype(Test<I>(0)), char>;
+    // static constexpr bool value = is_option<decltype(dummyVal<I>().next())>::value; 
+  };
+
+#define ASSERT_ITER(I) static_assert(is_iter<I>::value);
+// #define ASSERT_ITER(I) static_assert(is_option<decltype(dummyVal<I>().next())>::value);
 
     template<class T> struct opt_value_type;
     template<template<class> class Tmplt, class T> struct opt_value_type<Tmplt<T>> { using type = T; };
 
     template<class I>
     // using value_type = typename opt_value_type<decltype(((I*)0)->next())>::type;
-    using value_type = typename decltype(((I*)0)->next())::value_type;
+    using value_type = typename decltype(dummyVal<I>().next())::value_type;
 
 
     template<class Op>
@@ -26,7 +44,10 @@ namespace viras {
       Op self;
       template<class I>
       friend auto operator|(I iter, IterCombinator self) -> decltype(auto) 
-      { return (self.self)(std::move(iter)); }
+      { 
+        ASSERT_ITER(I)
+        return (self.self)(std::move(iter)); 
+      }
 
       template<class Op2>
       auto compose(IterCombinator<Op2> other) {
@@ -142,6 +163,7 @@ namespace viras {
 
     template<class I, class F>
     struct MapIter {
+      ASSERT_ITER(I)
       I i;
       F f;
       auto next() -> decltype(auto) 
@@ -161,9 +183,10 @@ namespace viras {
 
     template<class I, class F>
     struct FilterIter {
+      ASSERT_ITER(I)
       I i;
       F f;
-      auto next() -> decltype(auto) { 
+      auto next() { 
         auto e = i.next();
         while (e && !f(*e))
           e = i.next();
@@ -172,7 +195,7 @@ namespace viras {
     };
 
     constexpr auto filter = [](auto f) {
-      return iterCombinator([f = std::move(f)](auto i) {
+      return iterCombinator([f = std::move(f)](auto i) mutable {
         return FilterIter<decltype(i), decltype(f)>{std::move(i),std::move(f)};
       });
     };
@@ -181,9 +204,7 @@ namespace viras {
     inline auto dedup() {
       return iterCombinator([](auto iter) {
             return std::move(iter)
-              | filter([set = std::set<
-                  value_type<decltype(iter)>
-                  >()](auto e) mutable {
+              | filter([set = std::set<value_type<decltype(iter)>>()](auto e) mutable {
                   return set.insert(e).second;
               });
         });
@@ -218,7 +239,10 @@ namespace viras {
     template<class I>
     struct FlattenIter {
       I outer;
-      std::optional<value_type<I>> inner;
+      ASSERT_ITER(I)
+      ASSERT_ITER(value_type<I>)
+      using Inner = std::optional<value_type<I>>;
+      Inner inner;
       bool init;
 
       FlattenIter(I i): outer(std::move(i)), inner(), init(false) {}
@@ -226,8 +250,8 @@ namespace viras {
       std::optional<value_type<value_type<I>>> next()
       {
         if (!init) {
-          inner.~decltype(inner)();
-          new(&inner) decltype(inner)(outer.next());
+          inner.~Inner();
+          new(&inner) Inner(outer.next());
           init = true;
         }
         while (inner) {
@@ -235,8 +259,8 @@ namespace viras {
           if (next) 
             return next;
           else {
-            inner.~decltype(inner)();
-            new(&inner) decltype(inner)(outer.next());
+            inner.~Inner();
+            new(&inner) Inner(outer.next());
           }
         }
         return {};
@@ -400,12 +424,13 @@ namespace viras {
     { return ValsIter<A, std::tuple_size_v<std::tuple<A, As...>>>{ ._vals = {std::move(a), std::move(as)...}, ._cur = 0, }; }
 
 
-    template<class... Is>
+    template<class I, class... Is>
     struct IfThenElseIter {
-      std::variant<Is...> self;
+      std::variant<I, Is...> self;
 
-      auto next()
-      { return std::visit([](auto&& x){ return x.next(); }, self); }
+      auto next() -> std::optional<value_type<I>>
+      { return std::visit([](auto&& x) -> std::optional<value_type<I>> 
+                          { return x.next(); }, self); }
     };
 
     template<class Conds, class... Thens>
@@ -427,6 +452,7 @@ namespace viras {
         static std::optional<Out> apply(IfThen& self) {
           if (std::get<i>(self._conds)()) {
             auto then = std::get<i>(self._thens)();
+            ASSERT_ITER(decltype(then));
             return std::optional<Out>(Out(std::in_place_index_t<i>(), std::move(then)));
           } else {
             return __TryIfThen<i + 1, sz>::template apply<Out>(self);
@@ -449,13 +475,13 @@ namespace viras {
       {
         using Out = IfThenElseIter<std::invoke_result_t<Thens>..., 
                                   std::invoke_result_t<Else>>;
-        using Var = std::variant<std::invoke_result_t<Thens>..., 
+        using Variant0 = std::variant<std::invoke_result_t<Thens>..., 
                                  std::invoke_result_t<Else>>;
-        auto var = __TryIfThen<0, std::tuple_size_v<Conds>>::template apply<Var>(*this);
+        auto var = __TryIfThen<0, std::tuple_size_v<Conds>>::template apply<Variant0>(*this);
         if (var) {
           return Out{.self = std::move(*var)};
         } else {
-          return Out{.self = Var(std::in_place_index_t<std::tuple_size_v<Conds>>(),e())};
+          return Out{.self = Variant0(std::in_place_index_t<std::tuple_size_v<Conds>>(),e())};
         }
       }
     };

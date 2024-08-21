@@ -45,12 +45,12 @@ struct VirasTest : Viras<C>
     std::optional<std::string> check(std::vector<VirtualTerm<C>> const& result) {
       for (auto s : iter::array(expected) | iter::std_for) {
         if (!(iter::array(result) | iter::any([&](auto* res) { return *res == *s; })) ) {
-          return output_to_string("not found: ", s);
+          return output_to_string("not found: ", *s);
         }
       }
       for (auto s : iter::array(result) | iter::std_for) {
         if (!(iter::array(expected) | iter::any([&](auto* exp) { return *exp == *s; })) ) {
-          return output_to_string("unexpected term in result: ", s);
+          return output_to_string("unexpected term in result: ", *s);
         }
       }
       return {};
@@ -216,6 +216,9 @@ struct VirasTest : Viras<C>
     auto a = term(this->test_var("a"));
     auto b = term(this->test_var("b"));
     auto c = term(this->test_var("c"));
+    auto z = term(this->test_var("z"));
+    auto s = term(this->test_var("s"));
+    auto t = term(this->test_var("t"));
     auto frac = [&](auto l, auto r) { return numeral(l) / r; };
     std::vector<Term<C>> const_terms = { 
         a 
@@ -284,6 +287,95 @@ struct VirasTest : Viras<C>
     }                                                                                     \
   }
 
+
+    DEF_TEST(not_implemented_1_numeral,
+        ElimSetTest {
+          .conj = { floor(x) > 3 },
+          .expected = set_equal( term(4) ),
+        })
+
+    DEF_TEST(not_implemented_1_numeral, 
+        ElimSetTest {
+          .conj = { floor(x) >= 3 },
+          .expected = set_equal( term(3) ),
+        })
+
+
+    DEF_TEST(not_implemented_1_term, 
+        ElimSetTest {
+          .conj = { floor(x) >= a },
+          .expected = set_equal( ceil(a) ),
+        })
+
+    DEF_TEST(not_implemented_1_term, 
+        ElimSetTest {
+          .conj = { floor(x) > a },
+          .expected = set_equal( floor(a + 1) ),
+        })
+
+    DEF_TEST(not_implemented_1_term, 
+        ElimSetTest {
+          .conj = { floor(3 * x + b) >= a },
+          .expected = set_equal( grid_ceil(a, Break<C>(b, numeral(3))) ),
+        })
+
+    DEF_TEST(not_implemented_1_term, 
+        ElimSetTest {
+          .conj = { floor(3 * x + b) > a },
+          .expected = set_equal( grid_floor(a + 1, Break<C>(b, numeral(3))) ),
+        })
+
+    DEF_TEST(not_implemented_2_term, 
+        ElimSetTest {
+          .conj = {  a >= floor(x) },
+          .expected = set_equal( -infty ),
+        })
+
+
+
+    DEF_TEST(not_implemented_3_term, 
+        ElimSetTest {
+          .conj = {  -floor(x - b) + a + floor(x) >= 0 },
+          .expected = set_equal( -infty ),
+        })
+
+
+    DEF_TEST(not_implemented_4_term, 
+        ElimSetTest {
+          .conj = {  x - floor(x) + a >= 0 },
+          .expected = set_equal( -a + Z(1) ),
+        })
+
+
+    // TODO change this to set_equal
+#define AXIOM_RULE_VIRAS_CHECK containsAll
+
+    DEF_TEST(axiom_rule_viras_appl_ax0_fm0, 
+        ElimSetTest {
+          .conj = {  -floor(z) + floor(x) - t >= 0 },
+          .expected = AXIOM_RULE_VIRAS_CHECK( ceil(t + floor(z)) ),
+        })
+
+    DEF_TEST(axiom_rule_viras_appl_ax0_fm1, 
+        ElimSetTest {
+          .conj = {  -floor(z) + floor(x) - t >= 0 },
+          .expected = AXIOM_RULE_VIRAS_CHECK( ceil(t + floor(z)) ),
+        })
+
+    // DEF_TEST(axiom_rule_viras_appl_ax4_sup2, 
+    //     ElimSetTest {
+    //       .conj = {  s - floor(x) >= 0 },
+    //       .expected = AXIOM_RULE_VIRAS_CHECK( floor(s) ),
+    //     })
+    //
+    DEF_TEST(axiom_rule_viras_appl_ax4_sup2, 
+        ElimSetTest {
+          .conj = {  s - floor(-x) >= 0 },
+          .expected = AXIOM_RULE_VIRAS_CHECK( -floor(s) ),
+        })
+
+
+    // TODO make sure this is evaluated to true: floor(a) + 1 > a for uninterpreted terms
 
     DEF_TEST(lra_01, 
         ElimSetTest {
@@ -484,6 +576,9 @@ struct VirasTest : Viras<C>
           .expected = allPass(TEST_EQ(result.lim, -x + floor(x) + 1))
         })
 
+    // TODO test the substitution for fin and epsilon
+    //
+
     DEF_TEST(motivating, 
         ElimSetTest {
           .conj = { 
@@ -493,6 +588,15 @@ struct VirasTest : Viras<C>
           },
           .expected = containsAll( numeral(0) + Z(1), floor(a) + frac(1,3), -infty ), 
         })
+
+    DEF_TEST(misc_01_deleteable, 
+        ElimSetTest {
+          .conj = { 
+             eq(floor(a - x), 0)
+          },
+          .expected = containsAll( numeral(0) + Z(1), floor(a) + frac(1,3), -infty ), 
+        })
+
 
 
     for (auto t : const_terms) {

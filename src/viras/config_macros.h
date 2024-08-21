@@ -25,3 +25,6 @@
 #  define DBGE(expr) __VIRAS_LOG(#expr, " = ", expr)
 #endif
 
+#ifndef VIRAS_UNREACHABLE
+#  define VIRAS_UNREACHABLE VIRAS_ASSERT(false) while (true) {}
+#endif

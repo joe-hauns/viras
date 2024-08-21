@@ -24,6 +24,7 @@ namespace viras {
       case PredSymbol::Neq: return true;
       case PredSymbol::Eq: return false;
       }
+      VIRAS_UNREACHABLE
     }
 
     static LiraLiteral analyse(Literal<C> const& self, Var<C> x) 

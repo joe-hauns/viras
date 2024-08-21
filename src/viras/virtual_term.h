@@ -96,6 +96,7 @@ namespace viras {
   };
 
   namespace sugar {
+
     template<class C>
     VirtualTerm<C> operator+(VirtualTerm<C> const& t, Epsilon const& e)
     { 
@@ -103,6 +104,10 @@ namespace viras {
       out.epsilon = std::optional<Epsilon>(e);
       return out; 
     }
+
+    template<class C>
+    VirtualTerm<C> operator+(VirtualTerm<C> const& t, std::optional<Epsilon> const& e)
+    { return bool(e) ? t + *e : t; }
 
     template<class C>
     VirtualTerm<C> operator+(VirtualTerm<C> const& t, ZComp<C> const& z) 

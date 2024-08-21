@@ -115,7 +115,7 @@ namespace viras {
       std::map<Term, Numeral> inner;
 
       auto update = [&](auto& map, auto key, auto f) {
-        auto iter = map.insert(std::make_tuple(key,numeral(0))).first;
+        auto iter = map.insert(std::make_pair(key,numeral(0))).first;
         auto& val = iter->second;
         val = f(val);
       };

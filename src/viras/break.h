@@ -34,6 +34,7 @@ namespace viras {
         case Bound::Open:   return grid_floor(t + p, s_pZ);
         case Bound::Closed: return grid_ceil(t, s_pZ);
       };
+      VIRAS_UNREACHABLE
     }();
     VIRAS_ASSERT(k != 0 || (l == Bound::Closed && r == Bound::Closed));
     return iter::if_then_(t.config->opts.optimizeGridIntersection() && k == 0, iter::vals(start))
@@ -43,6 +44,7 @@ namespace viras {
                                   case Bound::Open:   return n * p < k; 
                                   case Bound::Closed: return n * p <= k; 
                                 }
+                                VIRAS_UNREACHABLE
                               })
                             | iter::map([start, p](auto n) {
                               return start + p * n;

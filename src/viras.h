@@ -56,7 +56,7 @@ namespace viras {
     std::vector<LiraLiteral<C>> analyse(typename C::Literals const& self, typename C::Var x)
     { return analyse(Literals<C> { &_config, self }, Var<C> { &_config, x }); }
 
-    static constexpr Epsilon epsilon;
+    static constexpr Epsilon epsilon{};
 
     auto elim_set(Var<C> const& x, LiraLiteral<C> const& lit)
     {
@@ -124,7 +124,7 @@ namespace viras {
                                  else____(                   iter::vals<VT>(t.distXminus()        ))
                        ; };
 
-#define _elem(elem) elem() | iter_dbg(0, "elimset (" #elem ") of ", x)
+#define _elem(elem) elem() | iter_dbg(0, "elimset (", std::setw(12), #elem,  ") of ", lit, "@", x)
                        return iter::if_then_(t.periodic(), iter::concat( _elem(ebreak), _elem(eseg)))
                                     else____(              iter::concat( _elem(ebreak), _elem(eseg), _elem(ebound_plus), _elem(ebound_minus)));
 // #undef _elem
@@ -133,7 +133,8 @@ namespace viras {
 
     auto elim_set(Var<C> const& x, std::vector<LiraLiteral<C>> const& lits)
     { return iter::array(lits)
-        | iter::flat_map([&](auto lit) { return elim_set(x, *lit); }); }
+        | iter::flat_map([&](auto lit) { return elim_set(x, *lit); })
+        | iter::dedup(); }
 
     Literal<C> literal(Term<C> t, PredSymbol s)
     { return Literal<C> { &_config, _config.create_literal(t.inner, s), }; }
@@ -178,6 +179,8 @@ namespace viras {
                 :              symbol);
           }
         }
+        VIRAS_UNREACHABLE
+
       } else {
         VIRAS_ASSERT(!vt.epsilon && !vt.infty && !vt.period);
         return literal(subs(s.self, x, *vt.term), symbol);
@@ -209,9 +212,9 @@ namespace viras {
                                              | iter::fold([](auto l, auto r) { return lcm(l, r); }));
 
                               auto iGrid = [ vt](auto... args) {
-                              return intersectGrid(Break<C>(*vt.term, *vt.period), args...)
-                                                  | iter::map([](auto x) { return VirtualTerm<C>(x); });
-                              ; };
+                                return intersectGrid(Break<C>(*vt.term, *vt.period), args...)
+                                                    | iter::map([vt](auto x) { return VirtualTerm<C>(x) + vt.epsilon; });
+                                ; };
                               auto all_lim_top = [A](Infty inf) { return A() | iter::all([inf](auto l) { return l->lim(inf) == true; }); };
                               auto one_lambda_plus = [iGrid, vt, lambda](Infty inf) {
                                 return iGrid(Bound::Closed, *vt.term, lambda, Bound::Open)
@@ -247,7 +250,6 @@ namespace viras {
     auto quantifier_elimination(Var<C> const& x, std::vector<LiraLiteral<C>> const& lits)
     {
       return elim_set(x, lits)
-        | iter::dedup()
         | iter::flat_map([this,&lits,x](auto t) { return vsubs(lits, x, t); });
     }
 
