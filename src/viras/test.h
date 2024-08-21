@@ -219,7 +219,7 @@ struct VirasTest : Viras<C>
     auto z = term(this->test_var("z"));
     auto s = term(this->test_var("s"));
     auto t = term(this->test_var("t"));
-    auto frac = [&](auto l, auto r) { return numeral(l) / r; };
+    auto frac = [&](auto l, auto r) { return this->numeral(l) / r; };
     std::vector<Term<C>> const_terms = { 
         a 
       , a + b

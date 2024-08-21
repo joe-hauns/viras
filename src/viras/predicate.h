@@ -1,4 +1,5 @@
 #pragma once
+#include "viras/config_macros.h"
 #include <iostream>
 
 namespace viras {
@@ -12,5 +13,6 @@ namespace viras {
       case PredSymbol::Eq: return out << "=";
       case PredSymbol::Neq: return out << "!=";
     }
+    VIRAS_UNREACHABLE
   }
 }

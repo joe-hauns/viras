@@ -469,61 +469,6 @@ namespace term_engine {
 
 } // term_engine
  
-// #define DEF_MATCH(Type, eval_function) \
-//     template<class T, class V, class O, class M, class A, class F> \
-//     Type eval_function(ast::Match<T, V, O, M, A, F> const& expr)  \
-//     {  \
-//       using namespace ast; \
-//       return config->matchTerm(eval_function(expr.t), \
-//           [&](auto var) -> Type { return eval_function(expr.var(var));  }, \
-//           [&]() -> Type { return eval_function(expr.one());  }, \
-//           [&](auto l, auto r) -> Type { return eval_function(expr.mul(l, r));  }, \
-//           [&](auto l, auto r) -> Type { return eval_function(expr.add(l, r));  }, \
-//           [&](auto t) -> Type { return eval_function(expr.floor(t));  });  \
-//     } \
-     //
-     // template<class T, class V, class O, class M, class A, class F>
-     // auto match_term(
-     //   T t,
-     //   V var, 
-     //   O one, 
-     //   M mul, 
-     //   A add, 
-     //   F floor) {
-     //   return Match<T, V, O, M, A, F>{ 
-     //     std::move(t),
-     //     std::move(var),
-     //     std::move(one),
-     //     std::move(mul),
-     //     std::move(add),
-     //     std::move(floor),
-     //   };
-     // }
-     //
-
-    // DEF_MATCH(Numeral, eval_numeral)
-
-
-  // template<class C, class IfVar, class IfOne, class IfMul, class IfAdd, class IfFloor>
-  // auto match_term(
-  //     C config,
-  //     Term<C> t, 
-  //     IfVar   if_var, 
-  //     IfOne   if_one, 
-  //     IfMul   if_mul, 
-  //     IfAdd   if_add, 
-  //     IfFloor if_floor
-  //     ) -> decltype(auto) {
-  //   return config->match_term(t,
-  //     [&](auto x) { return if_var(x); }, 
-  //     [&]() { return if_one(); }, 
-  //     [&](auto l, auto r) { return if_mul(Numeral<C> {t.config, l},Term<C>{t.config, r}); }, 
-  //     [&](auto l, auto r) { return if_add(Term<C>{t.config, l},Term<C>{t.config, r}); }, 
-  //     [&](auto x) { return if_floor(Term<C>{t.config, x}); }
-  //        );
-  // }
-
-
   template<class C>
   Term<C> subs(C* config, Term<C> self, Var<C> var, Term<C> by) {
     return config->matchTerm(self, 
