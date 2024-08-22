@@ -85,9 +85,9 @@ struct VirasTest : Viras<C>
     ExpectedCheck(SetEqual     x) : ExpectedCheckVar(std::move(x)) {}
 
     std::optional<std::string> check(std::vector<VirtualTerm<C>> const& result) 
-    { return std::visit([&](auto& x) { return x.check(result); }, *this); }
+    { return std::visit([&](auto& x) { return x.check(result); }, (ExpectedCheckVar const&)*this); }
     friend std::ostream& operator<<(std::ostream& out, ExpectedCheck const& self)
-    { std::visit([&](auto& self) { out << self; }, self); return out; }
+    { std::visit([&](auto& self) { out << self; }, (ExpectedCheckVar const&)self); return out; }
   };
 
   template<class... As>
