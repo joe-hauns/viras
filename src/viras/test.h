@@ -42,7 +42,7 @@ struct VirasTest : Viras<C>
   struct SetEqual {
     std::vector<VirtualTerm<C>> expected;
 
-    std::optional<std::string> check(std::vector<VirtualTerm<C>> const& result) {
+    std::optional<std::string> check(std::vector<VirtualTerm<C>> const& result) const {
       for (auto s : iter::array(expected) | iter::std_for) {
         if (!(iter::array(result) | iter::any([&](auto* res) { return *res == *s; })) ) {
           return output_to_string("not found: ", *s);
@@ -64,7 +64,7 @@ struct VirasTest : Viras<C>
   struct AllContained {
     std::vector<VirtualTerm<C>> expected;
 
-    std::optional<std::string> check(std::vector<VirtualTerm<C>> const& result) {
+    std::optional<std::string> check(std::vector<VirtualTerm<C>> const& result) const {
       for (auto& s : arrayIter(expected)) {
         if (!arrayIter(result).any([&](auto& res) { return res == s; }) ) {
           return output_to_string("not found: ", s);
@@ -84,7 +84,7 @@ struct VirasTest : Viras<C>
     ExpectedCheck(AllContained x) : ExpectedCheckVar(std::move(x)) {}
     ExpectedCheck(SetEqual     x) : ExpectedCheckVar(std::move(x)) {}
 
-    std::optional<std::string> check(std::vector<VirtualTerm<C>> const& result) 
+    std::optional<std::string> check(std::vector<VirtualTerm<C>> const& result) const 
     { return std::visit([&](auto& x) { return x.check(result); }, (ExpectedCheckVar const&)*this); }
     friend std::ostream& operator<<(std::ostream& out, ExpectedCheck const& self)
     { std::visit([&](auto& self) { out << self; }, (ExpectedCheckVar const&)self); return out; }
