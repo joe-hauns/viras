@@ -209,6 +209,7 @@ namespace viras {
                               VIRAS_ASSERT((P() | iter::count()) > 0); // if there are no periodic literals we cannot have periodic solution terms
                               Numeral<C> lambda = *(P()
                                              | iter::map([&](auto L) { return L->term.per; })
+                                             | iter::filter([](auto per) { return per != 0; })
                                              | iter::fold([](auto l, auto r) { return lcm(l, r); }));
 
                               auto iGrid = [ vt](auto... args) {
