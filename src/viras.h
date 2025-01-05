@@ -249,10 +249,8 @@ namespace viras {
     }
 
     auto quantifier_elimination(Var<C> const& x, std::vector<LiraLiteral<C>> const& lits)
-    {
-      return elim_set(x, lits)
-        | iter::flat_map([this,&lits,x](auto t) { return vsubs(lits, x, t); });
-    }
+    { return elim_set(x, lits)
+        | iter::flat_map([this,&lits,x](auto t) { return vsubs(lits, x, t); }); }
 
   public:
     auto quantifier_elimination(typename C::Var x, typename C::Literals ls)
@@ -260,7 +258,8 @@ namespace viras {
       auto lits = std::make_unique<std::vector<LiraLiteral<C>>>(analyse(ls, x));
       auto lits_ptr = lits.get();
       auto var = std::make_unique<Var<C>>(Var<C> { &_config, x });
-      return quantifier_elimination(*var, *lits_ptr)
+      auto var_ptr = var.get();
+      return quantifier_elimination(*var_ptr, *lits_ptr)
         | iter::store_value(std::move(lits))
         | iter::store_value(std::move(var))
         | iter::map([&](auto lits) { return std::move(lits) | iter::map([](auto lit) { return lit.inner; }); });
