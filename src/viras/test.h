@@ -5,7 +5,6 @@
 
 namespace viras {
 
-
 template<class A>
 bool is_set_equal(std::vector<A> const& lhs, std::vector<A> const& rhs) {
   auto find_missing = [](auto& l, auto& r) {
@@ -216,9 +215,6 @@ struct VirasTest : Viras<C>
     auto a = term(this->test_var("a"));
     auto b = term(this->test_var("b"));
     auto c = term(this->test_var("c"));
-    auto z = term(this->test_var("z"));
-    auto s = term(this->test_var("s"));
-    auto t = term(this->test_var("t"));
     auto frac = [&](auto l, auto r) { return this->numeral(l) / r; };
     std::vector<Term<C>> const_terms = { 
         a 
