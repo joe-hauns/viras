@@ -223,22 +223,6 @@ struct VirasTest : Viras<C>
       , x + a - x
       , floor(x) + a - floor(x) 
     };
-    // std::vector<Term<C>> _linear_terms_pos_slope = { 
-    //     a + frac(1,2) * x
-    //   , a + 2 * x + b + 3 * x
-    //   , 0 * x + a + x
-    //   , 2 * x + a - x 
-    //   , floor(x) + a - floor(x)  + frac(1,2) * x
-    // };
-    //
-    // auto linear_terms_pos_slope = [&]() { return 
-    //   iter::array(_linear_terms_pos_slope) | iter::map([](auto* x) { return *x; }); };
-    //
-    // auto linear_terms_neg_slope = [&]() { return 
-    //   linear_terms_pos_slope() | iter::map([](auto t) { return -t; }); };
-    //
-    // auto linear_terms_non_zero_slope = []() { return
-    //   iter::concat(linear_terms_pos_slope(), linear_terms_neg_slope()); };
 
 #define DEF_TEST(name, ...)                                                               \
     {                                                                                     \
