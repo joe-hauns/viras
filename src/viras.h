@@ -219,7 +219,7 @@ namespace viras {
                               auto all_lim_top = [A](Infty inf) { return A() | iter::all([inf](auto l) { return l->lim(inf) == true; }); };
                               auto one_lambda_plus = [iGrid, vt, lambda](Infty inf) {
                                 return iGrid(Bound::Closed, *vt.term, lambda, Bound::Open)
-                                     | iter::map([&](auto s) { return s + inf; });
+                                     | iter::map([=](auto s) { return s + inf; });
                               };
                               std::optional<LiraLiteral<C> const*> aperiodic_equality;
                               auto aperiodic_equality_exists = [&]() -> bool {
