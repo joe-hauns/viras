@@ -663,6 +663,11 @@ struct VirasTest : Viras<C>
       }
     }
 
+    DEF_TEST(bug_01_abs,
+        ElimSetTest {
+          .conj = { -(-x + 1 + -floor(x)) >= 0 },
+          .expected = set_equal( numeral(1), numeral(1) + epsilon, frac(1,2) ),
+        })
 
     auto vt = [](auto& xs) { return iter::array(xs) | iter::map([](auto* t) { return VirtualTerm<C>(*t); }); };
     auto plus_epsilon = [&](auto& xs) { return vt(xs) | iter::map([](auto x) { return x + epsilon; }); };
@@ -968,7 +973,6 @@ struct VirasTest : Viras<C>
               , TEST_EQ(result.deltaX(), numeral(1))
               ),
         })
-
 
     return tests;
   }

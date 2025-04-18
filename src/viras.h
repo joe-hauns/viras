@@ -102,7 +102,7 @@ namespace viras {
                                            | iter::map([&](auto* b) { return VT(t.zero(b->t)); }))
 
                                 else____(iter::array(t.breaks)
-                                           | iter::flat_map([&](auto* b) { return intersectGrid(Break<C>(t.zero(b->t), 1 - t.oslp / t.sslp),
+                                           | iter::flat_map([&](auto* b) { return intersectGrid(Break<C>(t.zero(b->t), abs(1 - t.oslp / t.sslp)),
                                                                                                 Bound::Open, t.distXminus(), t.deltaX(), Bound::Open); })
                                            | iter::map([&](auto t) { return VT(t); }))
                        ; };
