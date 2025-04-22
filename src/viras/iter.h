@@ -114,7 +114,7 @@ namespace viras {
 
 
     constexpr auto fold = [](auto f) {
-      return iterCombinator([f = std::move(f)](auto iter) -> std::optional<decltype(f(*iter.next(), *iter.next()))> {
+      return iterCombinator([f = std::move(f)](auto iter) -> std::optional<value_type<decltype(iter)>> {
           auto fst = iter.next();
           if (fst) {
             auto res = *fst;
