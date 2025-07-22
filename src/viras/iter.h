@@ -423,6 +423,10 @@ namespace viras {
     constexpr auto vals(A a, As... as) 
     { return ValsIter<A, std::tuple_size_v<std::tuple<A, As...>>>{ ._vals = {std::move(a), std::move(as)...}, ._cur = 0, }; }
 
+    template<class A>
+    constexpr auto vals()
+    { return empty<A>(); }
+
 
     template<class I, class... Is>
     struct IfThenElseIter {

@@ -77,6 +77,11 @@ namespace viras {
                                  )
 
                    else_is_(!t.breaks.empty(), [&]() {
+                       VIRAS_ASSERT(!t.continuous.first || !t.continuous.second) // if both sides are continuous then breaks must be empty
+                       auto bnd =
+                           t.continuous.first ? std::make_pair(Bound::Closed, Bound::Open)
+                         : t.continuous.second ? std::make_pair(Bound::Open, Bound::Closed)
+                         :                       std::make_pair(Bound::Closed, Bound::Closed);
                        auto ebreak       = [&]() {
                        return
                          iter::if_then_(t.periodic(),
@@ -84,12 +89,13 @@ namespace viras {
                                           | iter::map([&](auto* b) { return VT(*b); }) )
 
                                else____(iter::array(t.breaks)
-                                          | iter::flat_map([&](auto* b) { return intersectGrid(*b, Bound::Open, t.distXminus(), t.deltaX(), Bound::Open); })
+                                          | iter::flat_map([&,bnd](auto* b) { 
+                                            return intersectGrid(*b, bnd.first, t.distXminus(), t.deltaX(), bnd.second); 
+                                          })
                                           | iter::map([](auto t) { return VT(t); }) )
                        ; };
 
-                       auto breaks_plus_epsilon = [&]() { return ebreak() | iter::map([](auto vt) { return vt + epsilon; })
-                       ; };
+                       auto breaks_plus_epsilon = [&]() { return ebreak() | iter::map([](auto vt) { return vt + epsilon; }); };
 
                        auto ezero = [&]() {
                        return
@@ -102,27 +108,42 @@ namespace viras {
                                            | iter::map([&](auto* b) { return VT(t.zero(b->t)); }))
 
                                 else____(iter::array(t.breaks)
-                                           | iter::flat_map([&](auto* b) { return intersectGrid(Break<C>(t.zero(b->t), abs(1 - t.oslp / t.sslp)),
-                                                                                                Bound::Open, t.distXminus(), t.deltaX(), Bound::Open); })
+                                           | iter::flat_map([&,bnd](auto* b) { return intersectGrid(Break<C>(t.zero(b->t), abs(1 - t.oslp / t.sslp)),
+                                                                                                bnd.first, t.distXminus(), t.deltaX(), bnd.second); })
                                            | iter::map([&](auto t) { return VT(t); }))
                        ; };
+                       auto if_not_left_continuous = [&t](auto iter) { return 
+                         iter::if_then_(!t.continuous.first, iter)
+                               else____(iter::empty<VT>());
+                       };
                        auto eseg         = [&]() {
                          return
-                           iter::if_then_(t.sslp == 0 || ( t.sslp < 0 && isIneq(symbol)), breaks_plus_epsilon())
-                                 else_if_(t.sslp >  0 && symbol == PredSymbol::Geq, iter::concat(breaks_plus_epsilon(), ezero()))
+                           iter::if_then_(t.sslp == 0 || ( t.sslp < 0 && isIneq(symbol)), if_not_left_continuous(breaks_plus_epsilon()))
+                                 else_if_(t.sslp >  0 && symbol == PredSymbol::Geq, iter::concat(if_not_left_continuous(breaks_plus_epsilon()), ezero()))
                                  else_if_(t.sslp >  0 && symbol == PredSymbol::Gt , iter::concat(breaks_plus_epsilon(), ezero() | iter::map([](auto x) { return x + epsilon; })))
                                  else_if_(t.sslp != 0 && symbol == PredSymbol::Neq, iter::concat(breaks_plus_epsilon(), ezero() | iter::map([](auto x) { return x + epsilon; })))
                                  else_is_(t.sslp != 0 && symbol == PredSymbol::Eq,  ezero())
                        ; };
-                       auto ebound_plus  = [&]() { return
-                           iter::if_then_(lit.lim(infty), iter::vals<VT>(t.distXplus(), t.distXplus() + epsilon))
-                                else____(                   iter::vals<VT>(t.distXplus()                         ))
-                                 ; };
+
+                       auto ebound_plus  = ([&,bnd]() { return
+                           iter::if_then_(lit.lim(infty), iter::vals<VT>(bnd.second == Bound::Open ? t.distXplus() : t.distXplus() + epsilon))
+                                else____(                 iter::vals<VT>())
+                                 ; });
 
                        auto ebound_minus = [&]() { return
-                           iter::if_then_(lit.lim(-infty), iter::vals<VT>(t.distXminus(), -infty))
-                                 else____(                   iter::vals<VT>(t.distXminus()        ))
+                           iter::if_then_(lit.lim(-infty), iter::vals<VT>(-infty))
+                                 else____(                 iter::vals<VT>())
                        ; };
+
+                       // auto ebound_plus  = [&]() { return
+                       //     iter::if_then_(lit.lim(infty), iter::vals<VT>(t.distXplus(), t.distXplus() + epsilon))
+                       //          else____(                 iter::vals<VT>(t.distXplus()))
+                       //           ; };
+                       //
+                       // auto ebound_minus = [&]() { return
+                       //     iter::if_then_(lit.lim(-infty), iter::vals<VT>(-infty))
+                       //           else____(                 iter::vals<VT>())
+                       // ; };
 
 #define _elem(elem) elem() | iter_dbg(0, "elimset (", std::setw(12), #elem,  ") of ", lit, "@", x)
                        return iter::if_then_(t.periodic(), iter::concat( _elem(ebreak), _elem(eseg)))
@@ -263,6 +284,10 @@ namespace viras {
         | iter::store_value(std::move(lits))
         | iter::store_value(std::move(var))
         | iter::map([&](auto lits) { return std::move(lits) | iter::map([](auto lit) { return lit.inner; }); });
+    }
+
+    LiraLiteral<C> analyse(typename C::Var x, typename C::Literal l) {
+      return LiraLiteral<C>::analyse(Literal<C>{ &_config, l }, x);
     }
 
   };
