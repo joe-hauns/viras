@@ -26,6 +26,7 @@ namespace viras {
     Term<C> self;
     Var<C> x;
     Term<C> lim;
+    std::pair<bool, bool> continuous;
     Numeral<C> sslp;
     Numeral<C> oslp;
     Numeral<C> per;
@@ -94,6 +95,7 @@ namespace viras {
       res.deltaY = calcDeltaY(res, x, matchRec);
       res.distYminus = calcDistYminus(res, x, matchRec);
       res.breaks = calcBreaks(res, x, matchRec);
+      res.continuous = calcContinuous(res, x, matchRec);
       
 #define DEBUG_FIELD(lvl, field)                                                                \
         VIRAS_LOG(lvl, "analyse(", res.self, ")." #field " = ", res.field)
@@ -110,6 +112,33 @@ namespace viras {
     }
  
   private:
+
+    template<class MatchRec>
+    static std::pair<bool, bool> calcContinuous(LiraTerm const& self, Var<C> const& x, MatchRec matchRec) {
+       return matchRec(
+        /* var y */ [&](auto y) 
+        { return std::make_pair(true, true); },
+
+        /* numeral 1 */ [&]() 
+        { return std::make_pair(true, true); },
+
+        /* k * t */ [&](auto k, auto t, auto& rec) 
+        { return rec.continuous; },
+
+        /* l + r */ [&](auto l, auto r, auto& rec_l, auto& rec_r) 
+        { return std::make_pair(rec_l.continuous.first && rec_r.continuous.first, 
+                                rec_l.continuous.second && rec_r.continuous.second); },
+
+        /* floor t */   [&](auto t, auto& rec) 
+        { return std::make_pair(
+            rec.sslp >= 0 && rec.continuous.first,
+            rec.sslp <= 0 && rec.continuous.second
+            ); }
+
+        );
+    }
+
+
     template<class MatchRec>
     static Term<C> calcLim(LiraTerm const& self, Var<C> const& x, MatchRec matchRec) {
        return matchRec(

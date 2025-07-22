@@ -399,12 +399,18 @@ struct VirasTest : Viras<C>
     DEF_TEST(floor_2, 
         ElimSetTest {
           .conj = { floor(x) > x },
-          .expected = containsAll( 0 + Z(1), term(0) + epsilon + Z(1) ),  
+          .expected = containsAll( 0 + Z(1) ),  
         })
 
     DEF_TEST(floor_2_inv, 
         ElimSetTest {
           .conj = { x >= floor(x) },
+          .expected = containsAll( 0 + Z(1) ),  
+        })
+
+    DEF_TEST(floor_2_inv, 
+        ElimSetTest {
+          .conj = { x > floor(x) },
           .expected = containsAll( 0 + Z(1), term(0) + epsilon + Z(1) ),  
         })
 
@@ -490,10 +496,16 @@ struct VirasTest : Viras<C>
           .expected = containsAll( numeral(1) ), 
         })
 
+    // DEF_TEST(motivating_test_2,
+    //     ElimSetTest {
+    //       .conj = { floor( x ) - a >= 0 },
+    //       .expected = containsAll( a /* if a is integral */ ,  floor(a) + 1 /* == ceil(a) if a is not integral */), 
+    //     })
+
     DEF_TEST(motivating_test_2,
         ElimSetTest {
           .conj = { floor( x ) - a >= 0 },
-          .expected = containsAll( a /* if a is integral */ ,  floor(a) + 1 /* == ceil(a) if a is not integral */), 
+          .expected = containsAll( ceil(a) ), 
         })
 
     DEF_TEST(some_props, 
@@ -549,6 +561,25 @@ struct VirasTest : Viras<C>
 
     // TODO test the substitution for fin and epsilon
     //
+
+    DEF_TEST(misc_props_1, 
+        TermAnalysisTest {
+          .term = x - floor(x) + 2,
+          .expected = allPass(
+                TEST_EQ(result.distYminus  , term(2))
+              , TEST_EQ(result.distYplus (), term(3))
+              )
+        })
+
+    DEF_TEST(is_int_elim_set_1, 
+        ElimSetTest {
+          .conj = { 
+             eq(a - floor(x), 0),
+          },
+          .expected = set_equal( ceil(a) ), 
+        })
+
+    // TODO double check the continous optionizations
 
     DEF_TEST(motivating, 
         ElimSetTest {
@@ -662,6 +693,7 @@ struct VirasTest : Viras<C>
 
       }
     }
+    auto contin = [&x_var](auto t) { return  LiraTerm<C>::analyse(t, x_var).continuous; };
 
 
     auto vt = [](auto& xs) { return iter::array(xs) | iter::map([](auto* t) { return VirtualTerm<C>(*t); }); };
@@ -739,14 +771,19 @@ struct VirasTest : Viras<C>
 
         // >=
 
+
         DEF_TEST(non_linear_case_1_pos_sslp_geq,
             ElimSetTest {
               .conj = { t.term >= 0 }, 
               .expected = set_equal( 
-                  iter::concat( plus_epsilon(t.breaks)
-                              , vt(t.zeros) 
-                              , vt(t.breaks)) 
-                  | iter::collect_vec
+                contin(t.term).first 
+                  ? iter::concat( vt(t.zeros) 
+                                , vt(t.breaks)) 
+                    | iter::collect_vec
+                  : iter::concat( plus_epsilon(t.breaks)
+                                , vt(t.zeros) 
+                                , vt(t.breaks))
+                    | iter::collect_vec
                ), 
             })
 
@@ -754,10 +791,14 @@ struct VirasTest : Viras<C>
             ElimSetTest {
               .conj = { -t.term >= 0 }, 
               .expected = set_equal( 
-                  iter::concat( plus_epsilon(t.breaks)
-                              , vt(t.breaks)
-                              ) 
-                  | iter::collect_vec
+                contin(-t.term).first 
+                  ?  iter::concat( vt(t.breaks)
+                                 ) 
+                      | iter::collect_vec
+                  :  iter::concat( plus_epsilon(t.breaks)
+                                 , vt(t.breaks)
+                                 ) 
+                      | iter::collect_vec
                ), 
             })
 
@@ -780,10 +821,14 @@ struct VirasTest : Viras<C>
             ElimSetTest {
               .conj = { -t.term > 0 }, 
               .expected = set_equal( 
-                  iter::concat( plus_epsilon(t.breaks)
-                              , vt(t.breaks)
-                              ) 
-                  | iter::collect_vec
+                contin(-t.term).first 
+                 ? iter::concat( vt(t.breaks)
+                                ) 
+                    | iter::collect_vec
+                 : iter::concat( plus_epsilon(t.breaks)
+                                , vt(t.breaks)
+                                ) 
+                    | iter::collect_vec
                ), 
             })
 
@@ -880,7 +925,10 @@ struct VirasTest : Viras<C>
             ElimSetTest {
               .conj = { t.term > 0 }, 
               .expected = set_equal( 
-                  iter::concat( plus_epsilon(t.breaks)
+                contin(-t.term).first 
+                ?  iter::concat( vt(t.breaks)) 
+                  | iter::collect_vec
+                :  iter::concat( plus_epsilon(t.breaks)
                               , vt(t.breaks)) 
                   | iter::collect_vec
                ), 
