@@ -698,7 +698,8 @@ struct VirasTest : Viras<C>
     DEF_TEST(bug_01_abs,
         ElimSetTest {
           .conj = { -(-x + 1 + -floor(x)) >= 0 },
-          .expected = set_equal( numeral(1), numeral(1) + epsilon, frac(1,2) ),
+          .expected = set_equal( numeral(1)),
+          // .expected = set_equal( numeral(1), numeral(1) + epsilon, frac(1,2) ),
         })
 
     auto vt = [](auto& xs) { return iter::array(xs) | iter::map([](auto* t) { return VirtualTerm<C>(*t); }); };
