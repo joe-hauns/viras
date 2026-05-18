@@ -254,7 +254,8 @@ struct VirasTest : Viras<C>
   }
 
 #define TEST_CMP(lhs, OP, rhs)                                                            \
-  [=](auto input, LiraTerm<C>& result) -> std::optional<std::string> {                    \
+  [=,this](auto input, LiraTerm<C>& result) -> std::optional<std::string> {               \
+    (void) this; /* suppresses unused capture warning */                                  \
     if(lhs OP rhs)  {                                                                     \
       return std::optional<std::string>();                                                \
     } else {                                                                              \
